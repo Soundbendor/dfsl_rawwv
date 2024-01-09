@@ -7,7 +7,7 @@ from .sampcnn_simple import SampCNNSimple
 from .sampcnn_resn import SampCNNResN
 from .sampcnn_strided import SampCNNStrided
 from .sampcnn_se import SampCNNSE
-
+from .weight_gen_cls import WeightGenCls 
 #REFERENCES:
 # (1) Kim, T. (2019) sampleaudio [Github Repository]. Github. https://github.com/tae-jun/sampleaudio/
 # (2) Lee, J., Park, J., Kim, K. L, and Nam, J. (2018). SampleCNN: End-to-End Deep Convolutional Neural Networks Using Very Small Filters for Music Classification. Applied Sciences 8(1). https://doi.org/10.3390/app8010150
@@ -21,7 +21,7 @@ from .sampcnn_se import SampCNNSE
 # but doesn't include 1 channel conv
 
 class SampCNNModel(nn.Module):
-    def __init__(self, in_ch=1, strided_list=[], basic_list=[], res1_list=[], res2_list=[], se_list=[], rese1_list=[], rese2_list=[], simple_list=[], res1_dropout=0.2, res2_dropout=0.2, rese1_dropout=0.2, rese2_dropout=0.2,simple_dropout=0.5, se_fc_alpha=2.**(-3), rese1_fc_alpha=2.**(-3), rese2_fc_alpha=2.**(-3), use_classifier=True,fc_dim=-1, num_classes=10, sr=44100):
+    def __init__(self, in_ch=1, strided_list=[], basic_list=[], res1_list=[], res2_list=[], se_list=[], rese1_list=[], rese2_list=[], simple_list=[], res1_dropout=0.2, res2_dropout=0.2, rese1_dropout=0.2, rese2_dropout=0.2,simple_dropout=0.5, se_fc_alpha=2.**(-3), rese1_fc_alpha=2.**(-3), rese2_fc_alpha=2.**(-3), num_classes=10, sr=44100, seed=3, training_base = True):
         """
         EMBEDDER Layers (stored in self.embedder)
         strided_list: tuples of (num, ksize, out_channels, stride)
@@ -42,7 +42,6 @@ class SampCNNModel(nn.Module):
         """
         super().__init__()
         self.in_ch = in_ch
-        self.use_classifier = use_classifier
         self.num_classes = num_classes
         self.sr = sr
 
@@ -149,10 +148,13 @@ class SampCNNModel(nn.Module):
         self.out_ch = prev_ch
         self.in_samples = AU.insize_by_blocks2(cur_blklist)
         self.in_sec = AU.samp_to_sec(self.in_samples,sr=sr)
-
-
+        self.flatten = torch.nn.Flatten(start_dim=-2)
+        
         # output of embedder should be (n, prev_ch, 1)
         # middle dim according to (1) is same as num channels
+
+        self.classifier = WeightGenCls(num_classes = num_classes, dim=prev_ch, seed=seed, training_base=training_base)
+        """
         self.classifier = nn.Sequential()
         if use_classifier == True:
             self.fc_dim = fc_dim if fc_dim > 0 else prev_ch
@@ -160,13 +162,12 @@ class SampCNNModel(nn.Module):
             self.classifier.append(nn.Linear(prev_ch, self.fc_dim))
             self.classifier.append(nn.ReLU())
             self.classifier.append(nn.Linear(fc_dim, num_classes))
-
+        """
 
     def forward(self, cur_ipt):
         emb_out = self.embedder(cur_ipt)
-        if self.use_classifier == True:
-            net_out = self.classifier(emb_out)
-            return net_out
-        else:
-            return emb_out
+        flat_out = self.flatten(emb_out)
+        net_out = self.classifier(flat_out)
+        return net_out
+        #print(emb_out.shape)
 

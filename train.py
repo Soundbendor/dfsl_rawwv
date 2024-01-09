@@ -12,6 +12,7 @@ import time
 import contextlib
 from util.types import BatchType
 import util.results as UR 
+import sklearn
 #REFERENCES:
 # (1) Kim, T. (2019) sampleaudio [Github Repository]. Github. https://github.com/tae-jun/sampleaudio/
 # (2) Lee, J., Park, J., Kim, K. L, and Nam, J. (2018). SampleCNN: End-to-End Deep Convolutional Neural Networks Using Very Small Filters for Music Classification. Applied Sciences 8(1). https://doi.org/10.3390/app8010150
@@ -111,6 +112,12 @@ def batch_handler(model, dloader, cur_losser, cur_opter=None, batch_type = Batch
         time_batch_overall = time.time() - time_start
         time_avg = time_batch_overall/bs
     loss_avg = np.mean(loss_batch)
+    if to_print == True:
+        loss_str = f"+ Average Loss: {loss_avg}"
+        print(loss_str)
+        if to_time == True:
+            time_str = f"+ Average Time: {time_avg}, Overall Time: {time_batch_overall}"
+            print(time_str)
     ret = {"epoch_idx": epoch_idx, "batch_type": batch_type.name,
             "batch_avg_loss": loss_avg, "batch_avg_time": time_avg}
     return ret
@@ -142,12 +149,10 @@ def tester(model, cur_loss, test_data, bs = 4, res_dir = DEF_RESDIR, device='cpu
 def trainer(model, cur_loss, train_data, valid_data, lr=1e-4, bs = 4, epochs = 1, save_ivl=0, save_dir=DEF_SAVEDIR, res_dir = DEF_RESDIR, graph_dir = DEF_GRAPHDIR, device='cpu', expr_idx = 0, to_print = True, to_time = True, to_graph = True, to_res = True):
     train_dload = DataLoader(train_data, shuffle=True, batch_size = bs)
     valid_dload = DataLoader(valid_data, shuffle=True, batch_size = bs)
+    model.classifier.set_base_class_idxs(train_data.get_class_idxs())
     cur_optim = torch.optim.Adam(model.parameters(), lr=lr)
     res_train_batches = []
     res_valid_batches = []
-    if to_res == True:
-        settings_dict = {"lr": lr, "bs": bs, "epochs": epochs}
-        UR.settings_csv_writer(settings_dict, dest_dir = res_dir, expr_idx = expr_idx, expr_name="sampcnn_base")
     for epoch_idx in range(epochs):
         if to_print == True:
             print(f"\nEpoch {epoch_idx}\n ==========================")
@@ -157,7 +162,7 @@ def trainer(model, cur_loss, train_data, valid_data, lr=1e-4, bs = 4, epochs = 1
         if save_ivl > 0:
             if ((epoch_idx +1) % save_ivl == 0 and epoch_idx != 0) or epoch_idx == (epochs-1):
                 model_saver(model, save_dir=save_dir, epoch_idx=epoch_idx, expr_idx=expr_idx, mtype="embedder")
-                #model_saver(model, save_dir=save_dir, epoch_idx=epoch_idx, mtype="classifier")
+                model_saver(model, save_dir=save_dir, epoch_idx=epoch_idx, mtype="classifier")
 
 
         res_valid = batch_handler(model, valid_dload, cur_loss, cur_opter=None, batch_type = BatchType.valid, device=device, epoch_idx=epoch_idx, bs=bs, to_print=to_print, to_time = to_time)
@@ -166,15 +171,20 @@ def trainer(model, cur_loss, train_data, valid_data, lr=1e-4, bs = 4, epochs = 1
         res_train_batches.append(res_train)
         res_valid_batches.append(res_valid)
     if to_graph == True:
-        UR.train_valid_loss_grapher(res_train_batches, res_valid_batches, dest_dir="graph", expr_idx=expr_idx, expr_name="sampcnn_base", pretrain = False)
+        UR.train_valid_loss_grapher(res_train_batches, res_valid_batches, dest_dir="graph", expr_idx=expr_idx, expr_name="sampcnn_base")
 
 
 if __name__ == "__main__":
     expr_idx = int(time.time() * 1000)
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument("--lr", type=float, default=1e-6, help="learning rate")
+    parser.add_argument("--lr", type=float, default=5e-4, help="learning rate")
     parser.add_argument("--bs", type=int, default=4, help="batch size")
     parser.add_argument("--epochs", type=int, default=10, help="batch size")
+    parser.add_argument("--res1_dropout", type=float, default=0.2, help="res1 block dropout (if using)")
+    parser.add_argument("--res2_dropout", type=float, default=0.2, help="res2 block dropout (if using)")
+    parser.add_argument("--rese1_dropout", type=float, default=0.2, help="rese1 block dropout (if using)")
+    parser.add_argument("--rese2_dropout", type=float, default=0.2, help="rese2 block dropout (if using)")
+    parser.add_argument("--simple_dropout", type=float, default=0.5, help="simple block dropout (if using)")
     parser.add_argument("--save_ivl", type=int, default=0, help="(epoch interval) to save model (<= 0: don't save)")
     parser.add_argument("--data_dir", type=str, default=DEF_DATADIR, help="base folder of dataset")
     parser.add_argument("--save_dir", type=str, default=DEF_SAVEDIR, help="save directory")
@@ -200,10 +210,11 @@ if __name__ == "__main__":
 
     # (num ksize, out_ch, stride)
     strided_list = [(1,3,128,3)]
-    res1_list = [(2,3,128,3), (7,3,256,3),(1,2,256,2), (1,2,512,2)]
+    #res1_list = [(2,3,128,3), (7,3,256,3),(1,2,256,2), (1,2,512,2)]
+    res1_list = []
+    res2_list = [(2,3,128,3), (7,3,256,3),(1,2,256,2), (1,2,512,2)]
     simple_list = []
     # middle dim according to (1) is same as num channels
-    fc_dim = 512
     num_classes = 50
     device = 'cpu'
     to_train = True
@@ -211,7 +222,7 @@ if __name__ == "__main__":
     if torch.cuda.is_available() == True:
         device = 'cuda'
 
-    model = SampCNNModel(in_ch=1, strided_list=strided_list, basic_list=[], res1_list=res1_list, res2_list=[], se_list=[], rese1_list=[], rese2_list=[], simple_list=simple_list, res1_dropout=0.2, res2_dropout=0.2, rese1_dropout=0.2, rese2_dropout=0.2,simple_dropout=0.5, se_fc_alpha=2.**(-3), rese1_fc_alpha=2.**(-3), rese2_fc_alpha=2.**(-3), use_classifier=True,fc_dim=fc_dim, num_classes=num_classes, sr=44100).to(device)
+    model = SampCNNModel(in_ch=1, strided_list=strided_list, basic_list=[], res1_list=res1_list, res2_list=res2_list, se_list=[], rese1_list=[], rese2_list=[], simple_list=simple_list, res1_dropout=args.res1_dropout, res2_dropout=args.res2_dropout, rese1_dropout=args.rese1_dropout, rese2_dropout=args.rese2_dropout,simple_dropout=args.simple_dropout, se_fc_alpha=2.**(-3), rese1_fc_alpha=2.**(-3), rese2_fc_alpha=2.**(-3), num_classes=num_classes, sr=44100).to(device)
     if ".pth" in args.load_emb:
         load_file = args.load_emb
         expr_idx = int(load_file.split(os.sep)[-1].split("-")[0])
@@ -220,6 +231,14 @@ if __name__ == "__main__":
 
     if ".pth" in args.load_cls:
         model.classifier.load_state_dict(torch.load(args.load_cls))
+    if args.to_res == True:
+        settings_dict = {"lr": args.lr, "bs": args.bs, "epochs": args.epochs,
+                "res1_dropout": args.res1_dropout, "res2_dropout": args.res2_dropout,
+                "rese1_dropout": args.rese1_dropout, "rese2_dropout": args.res2_dropout,
+                "simple_dropout": args.simple_dropout
+                }
+        UR.settings_csv_writer(settings_dict, dest_dir = args.res_dir, expr_idx = expr_idx, expr_name="sampcnn_base")
+
     #print(model.embedder.state_dict())
     runner(model, to_train=to_train,expr_idx = expr_idx, lr=args.lr, bs=args.bs, epochs=args.epochs, save_ivl = args.save_ivl,
             res_dir=args.res_dir, save_dir=args.save_dir, to_print=args.to_print, to_time=args.to_time, data_dir=args.data_dir, to_graph=args.to_graph, to_res=args.to_res, device=device)

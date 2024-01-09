@@ -8,7 +8,7 @@ from util.types import BatchType
 def settings_csv_writer(settings_dict, dest_dir="res", expr_idx = 0, epoch_idx=0, expr_name="sampcnn_dfsl"):
     fname = f"{expr_idx}-{expr_name}-settings.csv"
     fpath = os.path.join(dest_dir, fname)
-    header = ["lr", "bs", "epochs"] 
+    header = ["lr", "bs", "epochs", "res1_dropout", "res2_dropout", "rese1_dropout", "rese2_dropout", "simple_dropout"] 
     with open(fpath, "w", newline='', encoding='utf-8') as f:
         dw = csv.DictWriter(f, fieldnames=header)
         dw.writeheader()

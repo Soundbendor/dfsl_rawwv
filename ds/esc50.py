@@ -13,6 +13,7 @@ class ESC50(Dataset):
     def __init__(self, folds=[1,2,3,4,5], classes=list(range(50)), k=80, srate=44100, samp_sz=236196, basefolder = os.path.join(os.path.split(__file__)[0], "ESC-50-master"), seed = 3):
         self.basepath = basefolder
         self.srate = srate
+        self.classes = classes
         self.audiopath = os.path.join(self.basepath, 'audio')
         self.csvpath = os.path.join(self.basepath,"meta", "esc50.csv")
         self.df = pd.read_csv(self.csvpath)
@@ -26,6 +27,9 @@ class ESC50(Dataset):
          
     def __len__(self):
         return self.shape[0]
+
+    def get_class_idxs(self):
+        return self.classes
 
     def __getitem__(self, idx):
         # return sound, label
