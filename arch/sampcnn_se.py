@@ -7,7 +7,7 @@ from torch import nn
 # (3) Kim, T., Lee, J., and Nam, J. (2019). Comparison and Analysis of SampleCNN Architectures for Audio Classification. IEEE Journal of Selected Topics in Signal Processing 13(2), 285-297. https://doi.org/10.1109/JSTSP.2019.2909479
 
 class SampCNNSE(nn.Module):
-    def __init__(self, conv_in = 1, conv_out = 1, conv_ks = 3, mp_ks=3, mp_stride=3,md_pad=0, md_dil=1,fc_alpha=2**4):
+    def __init__(self, conv_in = 1, conv_out = 1, conv_ks = 3, mp_ks=3, mp_stride=3,md_pad=0, md_dil=1,fc_alpha=2**4, omit_last_relu = False):
         fc_indim = int(conv_out * fc_alpha)
         self.layers = nn.Sequential(
                 nn.Conv1d(conv_in, conv_out. conv_ks, stride=1, padding='same',dilation=1),

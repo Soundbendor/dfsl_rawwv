@@ -53,10 +53,17 @@ class SampCNNModel(nn.Module):
         #(1) multiplies channels by 2 if 3rd block after strided or if last "config block"
         # also omits stride 1 conv as found in (3)
         num_strided = 0
+        rese2_isfinal = len(simple_list) == 0
+        rese1_isfinal = len(rese2_list) == 0 and rese2_isfinal
+        se_isfinal = len(rese1_list) == 0 and rese1_isfinal
+        res2_isfinal = len(se_list) == 0 and se_isfinal
+        res1_isfinal = len(res2_list) == 0 and res2_isfinal
+        basic_isfinal = len(res1_list) == 0 and res1_isfinal
+        strided_isfinal = len(basic_list) == 0 and basic_isfinal
         for (num,ks,ch,s) in strided_list:
-            for _ in range(num):
+            for i in range(num):
                 cstr = f"strided{num_strided}" 
-                cmodel = SampCNNStrided(conv_in=prev_ch,conv_out=ch,conv_ks=ks,conv_stride=s)
+                cmodel = SampCNNStrided(conv_in=prev_ch,conv_out=ch,conv_ks=ks,conv_stride=s,omit_last_relu=((i == num-1) and strided_isfinal))
                 ctup = (cstr, cmodel)
                 prev_ch = ch
                 num_strided += 1
@@ -65,9 +72,9 @@ class SampCNNModel(nn.Module):
 
         num_basic = 0
         for (num,ks,ch,s) in basic_list:
-            for _ in range(num):
+            for i in range(num):
                 cstr = f"basic{num_basic}" 
-                cmodel = SampCNNBasic(conv_in = prev_ch, conv_out=ch, conv_ks = ks, mp_ks=ks, mp_stride=s)
+                cmodel = SampCNNBasic(conv_in = prev_ch, conv_out=ch, conv_ks = ks, mp_ks=ks, mp_stride=s,omit_last_relu=((i == num-1) and basic_isfinal))
                 ctup = (cstr, cmodel)
                 prev_ch = ch
                 num_basic += 1
@@ -76,9 +83,9 @@ class SampCNNModel(nn.Module):
 
         num_res1 = 0
         for (num,ks,ch,s) in res1_list:
-            for _ in range(num):
+            for i in range(num):
                 cstr = f"resone{num_res1}" 
-                cmodel = SampCNNResN(n=1, conv_in = prev_ch, conv_out = ch, conv_ks = ks, dropout=res1_dropout, mp_ks=ks, mp_stride=s, use_se=False)
+                cmodel = SampCNNResN(n=1, conv_in = prev_ch, conv_out = ch, conv_ks = ks, dropout=res1_dropout, mp_ks=ks, mp_stride=s, use_se=False, omit_last_relu=((i == num-1) and res1_isfinal))
                 ctup = (cstr, cmodel)
                 prev_ch = ch
                 num_res1 += 1
@@ -88,9 +95,9 @@ class SampCNNModel(nn.Module):
 
         num_res2 = 0
         for (num,ks,ch,s) in res2_list:
-            for _ in range(num):
+            for i in range(num):
                 cstr = f"restwo{num_res2}" 
-                cmodel = SampCNNResN(n=2, conv_in = prev_ch, conv_out = ch, conv_ks = ks, dropout=res1_dropout, mp_ks=ks, mp_stride=s, use_se=False)
+                cmodel = SampCNNResN(n=2, conv_in = prev_ch, conv_out = ch, conv_ks = ks, dropout=res1_dropout, mp_ks=ks, mp_stride=s, use_se=False, omit_last_relu=((i == num-1) and res2_isfinal))
                 ctup = (cstr, cmodel)
                 prev_ch = ch
                 num_res2 += 1
@@ -100,9 +107,9 @@ class SampCNNModel(nn.Module):
 
         num_se = 0
         for (num,ks,ch,s) in se_list:
-            for _ in range(num):
+            for i in range(num):
                 cstr = f"se{num_se}" 
-                cmodel = SampCNNSE(conv_in = prev_ch, conv_out = ch, conv_ks = ks, mp_ks=ks, mp_stride=s,fc_alpha=se_fc_alpha)
+                cmodel = SampCNNSE(conv_in = prev_ch, conv_out = ch, conv_ks = ks, mp_ks=ks, mp_stride=s,fc_alpha=se_fc_alpha, omit_last_relu=((i == num-1) and se_isfinal))
                 ctup = (cstr, cmodel)
                 prev_ch = ch
                 num_se += 1
@@ -111,9 +118,9 @@ class SampCNNModel(nn.Module):
 
         num_rese1 = 0
         for (num,ks,ch,s) in rese1_list:
-            for _ in range(num):
+            for i in range(num):
                 cstr = f"reseone{num_rese1}" 
-                cmodel = SampCNNResN(n=1,conv_in = prev_ch, conv_out = ch, conv_ks = ks, dropout=rese1_dropout, mp_ks=ks, mp_stride=s,fc_alpha=rese1_fc_alpha, use_se=True)
+                cmodel = SampCNNResN(n=1,conv_in = prev_ch, conv_out = ch, conv_ks = ks, dropout=rese1_dropout, mp_ks=ks, mp_stride=s,fc_alpha=rese1_fc_alpha, use_se=True, omit_last_relu=((i == num-1) and rese1_isfinal))
                 ctup = (cstr, cmodel)
                 prev_ch = ch
                 num_rese1 += 1
@@ -123,9 +130,9 @@ class SampCNNModel(nn.Module):
 
         num_rese2 = 0
         for (num,ks,ch,s) in rese2_list:
-            for _ in range(n):
+            for i in range(n):
                 cstr = f"resetwo{num_rese2}" 
-                cmodel = SampCNNReSEN(n=2,conv_in = prev_ch, conv_out = ch, conv_ks = ks, dropout=rese2_dropout, mp_ks=ks, mp_stride=s,fc_alpha=rese2_fc_alpha, use_se=True)
+                cmodel = SampCNNReSEN(n=2,conv_in = prev_ch, conv_out = ch, conv_ks = ks, dropout=rese2_dropout, mp_ks=ks, mp_stride=s,fc_alpha=rese2_fc_alpha, use_se=True, omit_last_relu=((i == num-1) and rese2_isfinal))
                 ctup = (cstr, cmodel)
                 prev_ch = ch
                 num_rese2 += 1
@@ -135,9 +142,9 @@ class SampCNNModel(nn.Module):
 
         num_simple = 0
         for (num,ks,ch,s) in simple_list:
-            for _ in range(num):
+            for i in range(num):
                 cstr = f"simple{num_simple}" 
-                cmodel = SampCNNSimple(conv_in = prev_ch, conv_out =ch, conv_ks=1, dropout=simple_dropout)
+                cmodel = SampCNNSimple(conv_in = prev_ch, conv_out =ch, conv_ks=1, dropout=simple_dropout, omit_last_relu=(i == num-1))
                 ctup = (cstr, cmodel)
                 prev_ch = ch
                 num_simple += 1

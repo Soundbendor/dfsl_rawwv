@@ -8,13 +8,14 @@ from torch import nn
 
 
 class SampCNNStrided(nn.Module):
-    def __init__(self, conv_in = 1, conv_out = 1, conv_ks = 3, conv_stride = 3):
+    def __init__(self, conv_in = 1, conv_out = 1, conv_ks = 3, conv_stride = 3, omit_last_relu = False):
         super().__init__()
+        self.omit_last_relu = omit_last_relu
         self.layers = nn.Sequential(
                 nn.Conv1d(conv_in, conv_out, conv_ks, stride=conv_stride, padding=0,dilation=1),
-                nn.BatchNorm1d(conv_out,eps=1e-5,momentum=0.1),
-                nn.ReLU()
-                )
+                nn.BatchNorm1d(conv_out,eps=1e-5,momentum=0.1))
+        if omit_last_relu == False:
+            self.layers.append(nn.ReLU())
 
     def forward(self, cur_ipt):
         net_out = self.layers(cur_ipt)

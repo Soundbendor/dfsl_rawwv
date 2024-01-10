@@ -10,12 +10,13 @@ from torch import nn
 # defining res-n and resen as in (1) in one class
 
 class SampCNNResN(nn.Module):
-    def __init__(self, n=1, conv_in = 1, conv_out = 1, conv_ks = 3, dropout=0.2, mp_ks=3, mp_stride=3,mp_pad=0, mp_dil=1, fc_alpha=2**4, use_se = False):
+    def __init__(self, n=1, conv_in = 1, conv_out = 1, conv_ks = 3, dropout=0.2, mp_ks=3, mp_stride=3,mp_pad=0, mp_dil=1, fc_alpha=2**4, use_se = False, omit_last_relu = False):
         super().__init__()
         self.n = max(n,1)
         self.use_se = use_se
         self.expand_ch = conv_in != conv_out
         fc_indim = int(conv_out * fc_alpha)
+        self.omit_last_relu = omit_last_relu
         # (1) uses a ks-1 conv1d with batch norm to expand channels
         if self.expand_ch == True:
             self.layers_exp = nn.Sequential()
@@ -45,10 +46,10 @@ class SampCNNResN(nn.Module):
                     nn.Sigmoid()
                     )
      
-        self.layers2 = nn.Sequential(
-                nn.ReLU(),
-                nn.MaxPool1d(mp_ks,mp_stride,mp_pad,mp_dil)
-                )
+        self.layers2 = nn.Sequential()
+        if omit_last_relu == False:
+            self.layers2.append(nn.ReLU())
+        self.layers2.append(nn.MaxPool1d(mp_ks,mp_stride,mp_pad,mp_dil))
 
     def forward(self, cur_ipt):
         scl_ipt = None

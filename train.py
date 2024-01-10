@@ -12,7 +12,7 @@ import time
 import contextlib
 from util.types import BatchType
 import util.results as UR 
-import sklearn
+import util.metrics as UM
 #REFERENCES:
 # (1) Kim, T. (2019) sampleaudio [Github Repository]. Github. https://github.com/tae-jun/sampleaudio/
 # (2) Lee, J., Park, J., Kim, K. L, and Nam, J. (2018). SampleCNN: End-to-End Deep Convolutional Neural Networks Using Very Small Filters for Music Classification. Applied Sciences 8(1). https://doi.org/10.3390/app8010150
@@ -76,6 +76,7 @@ def loss_printer(epoch_idx, batch_idx, cur_loss, loss_type=BatchType.train, to_p
 def batch_handler(model, dloader, cur_losser, cur_opter=None, batch_type = BatchType.train, device='cpu', bs=4, epoch_idx=0, to_print=True, to_time = False):
     #time_batch = []
     loss_batch = []
+    acc1_batch = []
     #train = not (cur_opter is None)
     train = batch_type.name == 'train'
     time_start = -1
@@ -96,6 +97,8 @@ def batch_handler(model, dloader, cur_losser, cur_opter=None, batch_type = Batch
                 cur_loss.backward()
                 cur_opter.step()
                 cur_opter.zero_grad()
+            cur_acc1 = UM.top1_acc(pred, cl)
+            acc1_batch.append(cur_acc1)
             if to_print == True:
                 loss_printer(epoch_idx, batch_idx, loss_item, loss_type=batch_type, to_print = to_print )
             loss_batch.append(loss_item)
@@ -112,14 +115,15 @@ def batch_handler(model, dloader, cur_losser, cur_opter=None, batch_type = Batch
         time_batch_overall = time.time() - time_start
         time_avg = time_batch_overall/bs
     loss_avg = np.mean(loss_batch)
+    acc1_avg = np.mean(acc1_batch)
     if to_print == True:
-        loss_str = f"+ Average Loss: {loss_avg}"
+        loss_str = f"+ Avg Loss: {loss_avg}, Avg Acc (T1): {acc1_avg}"
         print(loss_str)
         if to_time == True:
-            time_str = f"+ Average Time: {time_avg}, Overall Time: {time_batch_overall}"
+            time_str = f"+ Avg Time: {time_avg}, Overall Time: {time_batch_overall}"
             print(time_str)
     ret = {"epoch_idx": epoch_idx, "batch_type": batch_type.name,
-            "batch_avg_loss": loss_avg, "batch_avg_time": time_avg}
+            "epoch_avg_loss": loss_avg, "epoch_avg_time": time_avg, "epoch_avg_acc1": acc1_avg}
     return ret
 
 def model_saver(cur_model, save_dir=DEF_SAVEDIR, epoch_idx=0, expr_idx = 0, mtype="embedder"):
@@ -171,7 +175,8 @@ def trainer(model, cur_loss, train_data, valid_data, lr=1e-4, bs = 4, epochs = 1
         res_train_batches.append(res_train)
         res_valid_batches.append(res_valid)
     if to_graph == True:
-        UR.train_valid_loss_grapher(res_train_batches, res_valid_batches, dest_dir="graph", expr_idx=expr_idx, expr_name="sampcnn_base")
+        UR.train_valid_grapher(res_train_batches, res_valid_batches, dest_dir="graph", graph_key="epoch_avg_loss", expr_idx=expr_idx, expr_name="sampcnn_base")
+        UR.train_valid_grapher(res_train_batches, res_valid_batches, dest_dir="graph", graph_key="epoch_avg_acc1", expr_idx=expr_idx, expr_name="sampcnn_base")
 
 
 if __name__ == "__main__":
@@ -213,6 +218,7 @@ if __name__ == "__main__":
     #res1_list = [(2,3,128,3), (7,3,256,3),(1,2,256,2), (1,2,512,2)]
     res1_list = []
     res2_list = [(2,3,128,3), (7,3,256,3),(1,2,256,2), (1,2,512,2)]
+    #res2_list = []
     simple_list = []
     # middle dim according to (1) is same as num channels
     num_classes = 50
