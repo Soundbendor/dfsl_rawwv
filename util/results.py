@@ -9,7 +9,7 @@ import re
 def settings_csv_writer(settings_dict, dest_dir="res", expr_idx = 0, epoch_idx=0, expr_name="sampcnn_dfsl"):
     fname = f"{expr_idx}-{expr_name}-settings.csv"
     fpath = os.path.join(dest_dir, fname)
-    header = ["lr", "bs", "epochs", "res1_dropout", "res2_dropout", "rese1_dropout", "rese2_dropout", "simple_dropout"] 
+    header = ["sr", "lr", "bs", "epochs", "res1_dropout", "res2_dropout", "rese1_dropout", "rese2_dropout", "simple_dropout", "use_class_weights"] 
     with open(fpath, "w", newline='', encoding='utf-8') as f:
         dw = csv.DictWriter(f, fieldnames=header)
         dw.writeheader()
@@ -20,7 +20,7 @@ def res_csv_appender(resdict, dest_dir="res", expr_idx = 0, epoch_idx=0, batch_t
     if pretrain == True:
         fname = f"{expr_idx}-{expr_name}-res_pretrain.csv"
     fpath = os.path.join(dest_dir, fname)
-    header = ["epoch_idx","batch_type","epoch_avg_loss","epoch_avg_time", "epoch_avg_acc1"]
+    header = ["epoch_idx","batch_type","epoch_avg_loss","epoch_avg_time", "epoch_avg_acc1", "epoch_avg_ap"]
     first_write = epoch_idx == 0 and batch_type == BatchType.train
     write_qual = "a" if pretrain == False else "w"
     with open(fpath, write_qual, newline='', encoding='utf-8') as f:

@@ -10,7 +10,7 @@ import os
 import argparse
 import time
 import contextlib
-from util.types import BatchType
+from util.types import BatchType,TrainPhase
 import util.results as UR 
 import util.metrics as UM
 #REFERENCES:
@@ -27,20 +27,17 @@ DEF_SAVEDIR = os.path.join(os.sep, 'media', 'dxk', 'tosh_ext', 'fscil', 'dfsl_ra
 #DEF_SAVEDIR = os.path.join(os.path.split(__file__)[0], "save")
 DEF_GRAPHDIR = os.path.join(os.path.split(__file__)[0], "graph")
 DEF_RESDIR = os.path.join(os.path.split(__file__)[0], "res")
-
+DEF_SEED = 3
 def make_folder(cur_arg, cur_dir):
     if os.path.exists(cur_dir) != True and cur_arg == True:
         os.makedirs(cur_dir)
 
-def runner(model, expr_idx = 0, to_train = True, seed=3, max_rng=10000, lr = 1e-4, bs=4, save_dir = DEF_SAVEDIR, res_dir = DEF_RESDIR, data_dir = DEF_DATADIR, epochs=1, save_ivl=0, to_print=True, to_time = True, to_graph=True, to_res = True, device='cpu'):
-    _sr = 44100
-    _max_samp = 236196
+def runner(model, expr_idx = 0, train_phase = TrainPhase.base_init, seed=DEF_SEED, sr = 16000, max_samp = 118098, max_rng=10000, lr = 1e-4, bs=4, save_dir = DEF_SAVEDIR, res_dir = DEF_RESDIR, data_dir = DEF_DATADIR, epochs=1, save_ivl=0, num_classes_total = 50, use_class_weights = False, to_print=True, to_time = True, to_graph=True, to_res = True, device='cpu'):
     rng = np.random.default_rng(seed=seed)
     cur_seed = rng.integers(0,max_rng,1)[0]
     torch.manual_seed(seed)
     cur_loss = nn.CrossEntropyLoss()
-
-    class_order = np.arange(0,50) # order of classes
+    class_order = np.arange(0,num_classes_total) # order of classes
     rng.shuffle(class_order) # shuffle classes
     base_classes = class_order[:30]
     novelval_classes = class_order[30:40]
@@ -50,22 +47,25 @@ def runner(model, expr_idx = 0, to_train = True, seed=3, max_rng=10000, lr = 1e-
     training_folds = fold_order[:3]
     valid_folds = fold_order[3:4]
     test_folds = fold_order[4:]
-    base_train_data = ESC50(folds=training_folds, classes=base_classes, k=24, srate=_sr, samp_sz=_max_samp, basefolder = data_dir, seed = cur_seed)
-    base_valid_data = ESC50(folds=valid_folds, classes=base_classes, k=24, srate=_sr, samp_sz=_max_samp, basefolder = data_dir, seed = cur_seed)
-    base_test_data = ESC50(folds=test_folds, classes=base_classes, k=24, srate=_sr, samp_sz=_max_samp, basefolder = data_dir, seed = cur_seed)
-    novelval_train_data = ESC50(folds=training_folds, classes=novelval_classes, k=8, srate=_sr, samp_sz=_max_samp, basefolder = data_dir, seed = cur_seed)
-    novelval_valid_data = ESC50(folds=valid_folds, classes=novelval_classes, k=8, srate=_sr, samp_sz=_max_samp, basefolder = data_dir, seed = cur_seed)
-    novelval_test_data = ESC50(folds=test_folds, classes=novelval_classes, k=8, srate=_sr, samp_sz=_max_samp, basefolder = data_dir, seed = cur_seed)
-    noveltest_train_data = ESC50(folds=training_folds, classes=noveltest_classes, k=8, srate=_sr, samp_sz=_max_samp, basefolder = data_dir, seed = cur_seed)
-    noveltest_valid_data = ESC50(folds=valid_folds, classes=noveltest_classes, k=8, srate=_sr, samp_sz=_max_samp, basefolder = data_dir, seed = cur_seed)
-    noveltest_test_data = ESC50(folds=test_folds, classes=noveltest_classes, k=8, srate=_sr, samp_sz=_max_samp, basefolder = data_dir, seed = cur_seed)
+    base_train_data = ESC50(folds=training_folds, classes=base_classes, k=24, srate=sr, samp_sz=max_samp, basefolder = data_dir, seed = cur_seed)
+    base_valid_data = ESC50(folds=valid_folds, classes=base_classes, k=24, srate=sr, samp_sz=max_samp, basefolder = data_dir, seed = cur_seed)
+    base_test_data = ESC50(folds=test_folds, classes=base_classes, k=24, srate=sr, samp_sz=max_samp, basefolder = data_dir, seed = cur_seed)
+    novelval_train_data = ESC50(folds=training_folds, classes=novelval_classes, k=8, srate=sr, samp_sz=max_samp, basefolder = data_dir, seed = cur_seed)
+    novelval_valid_data = ESC50(folds=valid_folds, classes=novelval_classes, k=8, srate=sr, samp_sz=max_samp, basefolder = data_dir, seed = cur_seed)
+    novelval_test_data = ESC50(folds=test_folds, classes=novelval_classes, k=8, srate=sr, samp_sz=max_samp, basefolder = data_dir, seed = cur_seed)
+    noveltest_train_data = ESC50(folds=training_folds, classes=noveltest_classes, k=8, srate=sr, samp_sz=max_samp, basefolder = data_dir, seed = cur_seed)
+    noveltest_valid_data = ESC50(folds=valid_folds, classes=noveltest_classes, k=8, srate=sr, samp_sz=max_samp, basefolder = data_dir, seed = cur_seed)
+    noveltest_test_data = ESC50(folds=test_folds, classes=noveltest_classes, k=8, srate=sr, samp_sz=max_samp, basefolder = data_dir, seed = cur_seed)
+
+    if use_class_weights == True and train_phase == TrainPhase.base_init:
+        cur_loss.weight = torch.tensor(base_train_data.class_prop)
     print("~~~~~")
     print(f"Running Expr {expr_idx} with epochs: {epochs}, bs:{bs}, lr:{lr}\n-----")
-    print(f"Training: {to_train}, Printing: {to_print}, Save Model Interval: {save_ivl}, Graphing: {to_graph}, Saving Results: {to_res}")
+    print(f"Training Base: {base_train}, Printing: {to_print}, Save Model Interval: {save_ivl}, Graphing: {to_graph}, Saving Results: {to_res}")
     print("~~~~~")
-    if to_train == True:
-        trainer(model,cur_loss,base_train_data,base_valid_data, expr_idx= expr_idx, epochs=epochs, lr=lr, bs=bs, save_ivl=save_ivl, save_dir=save_dir, to_print=to_print, to_time=to_time, to_graph=to_graph, to_res=to_res,device=device)
-    tester(model,cur_loss,base_test_data, expr_idx= expr_idx, bs=bs, to_print=to_print, to_time=to_time, to_graph=to_graph, to_res=to_res,device=device,pretrain=(to_train == False))
+    if train_phase == TrainPhase.base_init:
+        base_init_trainer(model,cur_loss,base_train_data,base_valid_data, expr_idx= expr_idx, epochs=epochs, lr=lr, bs=bs, save_ivl=save_ivl, num_classes_total = num_classes_total, save_dir=save_dir, to_print=to_print, to_time=to_time, to_graph=to_graph, to_res=to_res,device=device)
+        tester(model,cur_loss,base_test_data, expr_idx= expr_idx, bs=bs, num_classes_total = num_classes_total, to_print=to_print, to_time=to_time, to_graph=to_graph, to_res=to_res,device=device,pretrain=(train_phase != TrainPhase.base_init))
 
 def loss_printer(epoch_idx, batch_idx, cur_loss, loss_type=BatchType.train, to_print = True):
     if to_print == True:
@@ -73,10 +73,11 @@ def loss_printer(epoch_idx, batch_idx, cur_loss, loss_type=BatchType.train, to_p
         print(cur_str)
 
 
-def batch_handler(model, dloader, cur_losser, cur_opter=None, batch_type = BatchType.train, device='cpu', bs=4, epoch_idx=0, to_print=True, to_time = False):
+def batch_handler(model, dloader, cur_losser, cur_opter=None, batch_type = BatchType.train, device='cpu', bs=4, epoch_idx=0, num_classes_total = 50, to_print=True, to_time = False):
     #time_batch = []
     loss_batch = []
     acc1_batch = []
+    ap_batch = []
     #train = not (cur_opter is None)
     train = batch_type.name == 'train'
     time_start = -1
@@ -91,7 +92,7 @@ def batch_handler(model, dloader, cur_losser, cur_opter=None, batch_type = Batch
             pred = model(ci.to(device))
             #print(ci.shape)
             #print(cl.shape)
-            cur_loss = cur_losser(pred, cl.type(torch.FloatTensor).to(device))
+            cur_loss = cur_losser(pred, cl.to(device))
             loss_item = cur_loss.item()
             if train ==True:
                 cur_loss.backward()
@@ -99,6 +100,8 @@ def batch_handler(model, dloader, cur_losser, cur_opter=None, batch_type = Batch
                 cur_opter.zero_grad()
             cur_acc1 = UM.top1_acc(pred, cl)
             acc1_batch.append(cur_acc1)
+            cur_ap = UM.avg_prec(pred, cl, num_classes=num_classes_total)
+            ap_batch.append(cur_ap)
             if to_print == True:
                 loss_printer(epoch_idx, batch_idx, loss_item, loss_type=batch_type, to_print = to_print )
             loss_batch.append(loss_item)
@@ -116,13 +119,14 @@ def batch_handler(model, dloader, cur_losser, cur_opter=None, batch_type = Batch
         time_avg = time_batch_overall/bs
     loss_avg = np.mean(loss_batch)
     acc1_avg = np.mean(acc1_batch)
+    ap_avg = np.mean(ap_batch)
     if to_print == True:
-        loss_str = f"+ Avg Loss: {loss_avg}, Avg Acc (T1): {acc1_avg}"
+        loss_str = f"+ Avg Loss: {loss_avg}, Avg Acc (T1): {acc1_avg}, Avg Prec: {ap_avg}"
         print(loss_str)
         if to_time == True:
             time_str = f"+ Avg Time: {time_avg}, Overall Time: {time_batch_overall}"
             print(time_str)
-    ret = {"epoch_idx": epoch_idx, "batch_type": batch_type.name,
+    ret = {"epoch_idx": epoch_idx, "batch_type": batch_type.name, "epoch_avg_ap": ap_avg,
             "epoch_avg_loss": loss_avg, "epoch_avg_time": time_avg, "epoch_avg_acc1": acc1_avg}
     return ret
 
@@ -137,20 +141,26 @@ def model_saver(cur_model, save_dir=DEF_SAVEDIR, epoch_idx=0, expr_idx = 0, mtyp
     torch.save(cdict, outpath)
 
 
-def tester(model, cur_loss, test_data, bs = 4, res_dir = DEF_RESDIR, device='cpu', expr_idx = 0, to_print = True, to_time = True, to_graph = True, to_res = True, pretrain = False):
+def tester(model, cur_loss, test_data, bs = 4, res_dir = DEF_RESDIR, device='cpu', expr_idx = 0, num_classes_total = 50, to_print = True, to_time = True, to_graph = True, to_res = True, pretrain = False):
     test_dload = DataLoader(test_data, shuffle=True, batch_size = bs)
     if to_print == True:
         print(f"\n Testing\n ==========================")
-    res_test = batch_handler(model, test_dload, cur_loss, cur_opter=None, batch_type = BatchType.test, device=device, epoch_idx=-1, bs=bs, to_print=to_print, to_time = to_time)
+    res_test = batch_handler(model, test_dload, cur_loss, cur_opter=None, batch_type = BatchType.test, device=device, epoch_idx=-1, bs=bs, num_classes_total=num_classes_total, to_print=to_print, to_time = to_time)
     if to_res == True:
         UR.res_csv_appender(res_test, dest_dir=res_dir, expr_idx = expr_idx, epoch_idx=-1, batch_type=BatchType.test, expr_name="sampcnn_base", pretrain=pretrain)
 
 
 
+def base_weightgen_trainer(model, cur_loss, train_data, valid_data, lr=1e-4, bs = 4, epochs = 1, save_ivl = 0, save_dir = DEF_SAVEDIR, res_dir = DEF_RESDIR, graph_dir = DEF_GRAPHDIR, device = 'cpu', expr_idx = 0, num_classes_total = 50, to_print = True, to_time = True, to_graph = True, to_res = True, rng = None, k_novel = 5, base_classes = []):
+    if rng == None:
+        rng = np.random.default_rng(seed=DEF_SEED)
+    for epoch_idx in range(epochs):
+        cur_novel = rng.choice(base_classes, size=k_novel, replace=False)
+        cur_base = np.setdiff1d(base_classes,cur_novel)
+ 
 
 
-
-def trainer(model, cur_loss, train_data, valid_data, lr=1e-4, bs = 4, epochs = 1, save_ivl=0, save_dir=DEF_SAVEDIR, res_dir = DEF_RESDIR, graph_dir = DEF_GRAPHDIR, device='cpu', expr_idx = 0, to_print = True, to_time = True, to_graph = True, to_res = True):
+def base_init_trainer(model, cur_loss, train_data, valid_data, lr=1e-4, bs = 4, epochs = 1, save_ivl=0, save_dir=DEF_SAVEDIR, res_dir = DEF_RESDIR, graph_dir = DEF_GRAPHDIR, device='cpu', expr_idx = 0, num_classes_total = 50, to_print = True, to_time = True, to_graph = True, to_res = True):
     train_dload = DataLoader(train_data, shuffle=True, batch_size = bs)
     valid_dload = DataLoader(valid_data, shuffle=True, batch_size = bs)
     model.classifier.set_base_class_idxs(train_data.get_class_idxs())
@@ -160,7 +170,7 @@ def trainer(model, cur_loss, train_data, valid_data, lr=1e-4, bs = 4, epochs = 1
     for epoch_idx in range(epochs):
         if to_print == True:
             print(f"\nEpoch {epoch_idx}\n ==========================")
-        res_train = batch_handler(model, train_dload, cur_loss, cur_opter=cur_optim, batch_type = BatchType.train, device=device, epoch_idx=epoch_idx, bs=bs, to_print=to_print, to_time = to_time)
+        res_train = batch_handler(model, train_dload, cur_loss, cur_opter=cur_optim, batch_type = BatchType.train, device=device, epoch_idx=epoch_idx, bs=bs, num_classes_total = num_classes_total, to_print=to_print, to_time = to_time)
         if to_res == True:
             UR.res_csv_appender(res_train, dest_dir=res_dir, expr_idx = expr_idx, epoch_idx=epoch_idx, batch_type=BatchType.train, expr_name="sampcnn_base")
         if save_ivl > 0:
@@ -182,9 +192,11 @@ def trainer(model, cur_loss, train_data, valid_data, lr=1e-4, bs = 4, epochs = 1
 if __name__ == "__main__":
     expr_idx = int(time.time() * 1000)
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument("--lr", type=float, default=5e-4, help="learning rate")
+    parser.add_argument("--lr", type=float, default=1e-4, help="learning rate")
+    parser.add_argument("--sr", type=int, default=16000, help="sample rate")
     parser.add_argument("--bs", type=int, default=4, help="batch size")
     parser.add_argument("--epochs", type=int, default=10, help="batch size")
+    parser.add_argument("--use_class_weights", type=bool, default=False, help="use class weights to weight loss function")
     parser.add_argument("--res1_dropout", type=float, default=0.2, help="res1 block dropout (if using)")
     parser.add_argument("--res2_dropout", type=float, default=0.2, help="res2 block dropout (if using)")
     parser.add_argument("--rese1_dropout", type=float, default=0.2, help="rese1 block dropout (if using)")
@@ -201,6 +213,8 @@ if __name__ == "__main__":
     parser.add_argument("--to_time", type=bool, default=True, help="time inference/back prop")
     parser.add_argument("--to_graph", type=bool, default=True, help="save graphs")
     parser.add_argument("--to_res", type=bool, default=True, help="save result (textual) data")
+    parse.add_argument("--train_phase", type=str, default="base_init", help="specify training phase")
+
     args = parser.parse_args()
     #print(args)
     make_folder(args.save_ivl > 0, args.save_dir) 
@@ -213,38 +227,41 @@ if __name__ == "__main__":
     #(1) multiplies channels by 2 if 3rd block after strided or if last "config block"
     # also omits stride 1 conv as found in (3)
 
-    # (num ksize, out_ch, stride)
+    # (num, ksize, out_ch, stride)
     strided_list = [(1,3,128,3)]
     #res1_list = [(2,3,128,3), (7,3,256,3),(1,2,256,2), (1,2,512,2)]
     res1_list = []
-    res2_list = [(2,3,128,3), (7,3,256,3),(1,2,256,2), (1,2,512,2)]
+    res2_list = [(2,3,128,3), (7,3,256,3),(1,2,512,2)]
     #res2_list = []
     simple_list = []
     # middle dim according to (1) is same as num channels
-    num_classes = 50
+    num_classes_total = 50
     device = 'cpu'
-    to_train = True
+    t_ph = TrainPhase.base_init
+    max_samp = 118098
 
+    if args.train_phase == "base_weightgen":
+        t_ph = TrainPhase.base_weightgen
     if torch.cuda.is_available() == True:
         device = 'cuda'
 
-    model = SampCNNModel(in_ch=1, strided_list=strided_list, basic_list=[], res1_list=res1_list, res2_list=res2_list, se_list=[], rese1_list=[], rese2_list=[], simple_list=simple_list, res1_dropout=args.res1_dropout, res2_dropout=args.res2_dropout, rese1_dropout=args.rese1_dropout, rese2_dropout=args.rese2_dropout,simple_dropout=args.simple_dropout, se_fc_alpha=2.**(-3), rese1_fc_alpha=2.**(-3), rese2_fc_alpha=2.**(-3), num_classes=num_classes, sr=44100).to(device)
+    model = SampCNNModel(in_ch=1, strided_list=strided_list, basic_list=[], res1_list=res1_list, res2_list=res2_list, se_list=[], rese1_list=[], rese2_list=[], simple_list=simple_list, res1_dropout=args.res1_dropout, res2_dropout=args.res2_dropout, rese1_dropout=args.rese1_dropout, rese2_dropout=args.rese2_dropout,simple_dropout=args.simple_dropout, se_fc_alpha=2.**(-3), rese1_fc_alpha=2.**(-3), rese2_fc_alpha=2.**(-3), num_classes=num_classes_total, sr=args.sr).to(device)
     if ".pth" in args.load_emb:
         load_file = args.load_emb
         expr_idx = int(load_file.split(os.sep)[-1].split("-")[0])
-        to_train = False
+        t_ph = TrainPhase.base_weightgen
         model.embedder.load_state_dict(torch.load(args.load_emb))
 
     if ".pth" in args.load_cls:
         model.classifier.load_state_dict(torch.load(args.load_cls))
     if args.to_res == True:
-        settings_dict = {"lr": args.lr, "bs": args.bs, "epochs": args.epochs,
+        settings_dict = {"lr": args.lr, "bs": args.bs, "epochs": args.epochs, "sr": args.sr,
                 "res1_dropout": args.res1_dropout, "res2_dropout": args.res2_dropout,
                 "rese1_dropout": args.rese1_dropout, "rese2_dropout": args.res2_dropout,
-                "simple_dropout": args.simple_dropout
+                "simple_dropout": args.simple_dropout, "use_class_weights": args.use_class_weights
                 }
         UR.settings_csv_writer(settings_dict, dest_dir = args.res_dir, expr_idx = expr_idx, expr_name="sampcnn_base")
 
     #print(model.embedder.state_dict())
-    runner(model, to_train=to_train,expr_idx = expr_idx, lr=args.lr, bs=args.bs, epochs=args.epochs, save_ivl = args.save_ivl,
+    runner(model, train_phase = t_ph,expr_idx = expr_idx, lr=args.lr, bs=args.bs, epochs=args.epochs, save_ivl = args.save_ivl, sr = args.sr, max_samp = max_samp, use_class_weights = args.use_class_weights, num_classes_total = num_classes_total,
             res_dir=args.res_dir, save_dir=args.save_dir, to_print=args.to_print, to_time=args.to_time, data_dir=args.data_dir, to_graph=args.to_graph, to_res=args.to_res, device=device)
