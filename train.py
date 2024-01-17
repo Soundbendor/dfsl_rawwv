@@ -2,7 +2,7 @@ import numpy as np
 import torch
 import torchaudio as TA
 from torch import nn
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader,Subset
 from torch import cuda
 from arch.sampcnn_model import SampCNNModel
 from ds.esc50 import ESC50 
@@ -32,11 +32,11 @@ def make_folder(cur_arg, cur_dir):
     if os.path.exists(cur_dir) != True and cur_arg == True:
         os.makedirs(cur_dir)
 
-def runner(model, expr_idx = 0, train_phase = TrainPhase.base_init, seed=DEF_SEED, sr = 16000, max_samp = 118098, max_rng=10000, lr = 1e-4, bs=4, save_dir = DEF_SAVEDIR, res_dir = DEF_RESDIR, data_dir = DEF_DATADIR, epochs=1, save_ivl=0, num_classes_total = 50, use_class_weights = False, to_print=True, to_time = True, to_graph=True, to_res = True, device='cpu'):
+def runner(model, expr_idx = 0, train_phase = TrainPhase.base_init, seed=DEF_SEED, sr = 16000, max_samp = 118098, max_rng=10000, lr = 1e-4, bs=4, label_smoothing = 0.0, save_dir = DEF_SAVEDIR, res_dir = DEF_RESDIR, data_dir = DEF_DATADIR, epochs=1, save_ivl=0, num_classes_total = 50, use_class_weights = False, to_print=True, to_time = True, to_graph=True, to_res = True, device='cpu'):
     rng = np.random.default_rng(seed=seed)
     cur_seed = rng.integers(0,max_rng,1)[0]
     torch.manual_seed(seed)
-    cur_loss = nn.CrossEntropyLoss()
+    cur_loss = nn.CrossEntropyLoss(label_smoothing=label_smoothing)
     class_order = np.arange(0,num_classes_total) # order of classes
     rng.shuffle(class_order) # shuffle classes
     base_classes = class_order[:30]
@@ -61,7 +61,7 @@ def runner(model, expr_idx = 0, train_phase = TrainPhase.base_init, seed=DEF_SEE
         cur_loss.weight = torch.tensor(base_train_data.class_prop)
     print("~~~~~")
     print(f"Running Expr {expr_idx} with epochs: {epochs}, bs:{bs}, lr:{lr}\n-----")
-    print(f"Training Base: {base_train}, Printing: {to_print}, Save Model Interval: {save_ivl}, Graphing: {to_graph}, Saving Results: {to_res}")
+    print(f"Training Phase: {train_phase.name}, Printing: {to_print}, Save Model Interval: {save_ivl}, Graphing: {to_graph}, Saving Results: {to_res}")
     print("~~~~~")
     if train_phase == TrainPhase.base_init:
         base_init_trainer(model,cur_loss,base_train_data,base_valid_data, expr_idx= expr_idx, epochs=epochs, lr=lr, bs=bs, save_ivl=save_ivl, num_classes_total = num_classes_total, save_dir=save_dir, to_print=to_print, to_time=to_time, to_graph=to_graph, to_res=to_res,device=device)
@@ -152,11 +152,39 @@ def tester(model, cur_loss, test_data, bs = 4, res_dir = DEF_RESDIR, device='cpu
 
 
 def base_weightgen_trainer(model, cur_loss, train_data, valid_data, lr=1e-4, bs = 4, epochs = 1, save_ivl = 0, save_dir = DEF_SAVEDIR, res_dir = DEF_RESDIR, graph_dir = DEF_GRAPHDIR, device = 'cpu', expr_idx = 0, num_classes_total = 50, to_print = True, to_time = True, to_graph = True, to_res = True, rng = None, k_novel = 5, base_classes = []):
+    model.set_train_phase(TrainPhase.base_weightgen)
     if rng == None:
         rng = np.random.default_rng(seed=DEF_SEED)
     for epoch_idx in range(epochs):
         cur_novel = rng.choice(base_classes, size=k_novel, replace=False)
         cur_base = np.setdiff1d(base_classes,cur_novel)
+        # first sample from each class the examples to use to generate the classification vectors
+        # and then some how sample other examples for t_novel and t_test (see gidaris supp)
+        # and then do backprop to learn phi matrices and vectors
+        # one idea is to sample t_novel from the remaining examples from the training set to there's only 8 vectors per class (wang doesn't specify where these come from)
+        # another idea is to sample from validation set but then that might be information leakage
+        # in any case, T_novel should be the same as t_base per class (ideally)
+        # and we are only SIMULATING few-shot so it doesn't actually have to be fewshot
+        # for learning novel classes, phi matrices should be fixed
+       
+        model.set_exclude_idxs(cur_novel)
+        test_k = []
+         
+        for novel_cls in cur_novel: # sampling for classification vectors
+            cur_k_idxs = train_data.get_class_ex_idxs(novel_cls)
+            wg_k = rng.choice(cur_k_idxs, size=bs, replace=False)
+            unsampled = np.setdiff1d(cur_k_idxs, wg_k)
+            cur_subset = Subset(train_data, wg_k)
+            subset_dl = DataLoader(cur_subset, batch_size=bs, shuffle=False)
+            test_k += unsampled
+            for ci,cl in subset_dl:
+                model.set_pseudonovel_vec(novel_cls, ci)
+
+
+
+            
+
+
  
 
 
@@ -176,7 +204,7 @@ def base_init_trainer(model, cur_loss, train_data, valid_data, lr=1e-4, bs = 4, 
         if save_ivl > 0:
             if ((epoch_idx +1) % save_ivl == 0 and epoch_idx != 0) or epoch_idx == (epochs-1):
                 model_saver(model, save_dir=save_dir, epoch_idx=epoch_idx, expr_idx=expr_idx, mtype="embedder")
-                model_saver(model, save_dir=save_dir, epoch_idx=epoch_idx, mtype="classifier")
+                model_saver(model, save_dir=save_dir, epoch_idx=epoch_idx, expr_idx=expr_idx, mtype="classifier")
 
 
         res_valid = batch_handler(model, valid_dload, cur_loss, cur_opter=None, batch_type = BatchType.valid, device=device, epoch_idx=epoch_idx, bs=bs, to_print=to_print, to_time = to_time)
@@ -192,11 +220,16 @@ def base_init_trainer(model, cur_loss, train_data, valid_data, lr=1e-4, bs = 4, 
 if __name__ == "__main__":
     expr_idx = int(time.time() * 1000)
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument("--lr", type=float, default=1e-4, help="learning rate")
+    parser.add_argument("--lr", type=float, default=1e-5, help="learning rate")
     parser.add_argument("--sr", type=int, default=16000, help="sample rate")
-    parser.add_argument("--bs", type=int, default=4, help="batch size")
-    parser.add_argument("--epochs", type=int, default=10, help="batch size")
+    parser.add_argument("--bs", type=int, default=5, help="batch size")
+    parser.add_argument("--epochs", type=int, default=10, help="number of epochs")
     parser.add_argument("--use_class_weights", type=bool, default=False, help="use class weights to weight loss function")
+    parser.add_argument("--label_smoothing", type=float, default=0.1, help="label smoothing for loss function)")
+    parser.add_argument("--se_fc_alpha", type=float, default=2.**(-3), help="se alpha param for linear layer (if using)")
+    parser.add_argument("--rese1_fc_alpha", type=float, default=2.**(-3), help="rese1 alpha param for linear layer (if using)")
+    parser.add_argument("--rese2_fc_alpha", type=float, default=2.**(-3), help="rese2 alpha param for linear layer (if using)")
+    parser.add_argument("--se_dropout", type=float, default=0.2, help="se block dropout (if using)")
     parser.add_argument("--res1_dropout", type=float, default=0.2, help="res1 block dropout (if using)")
     parser.add_argument("--res2_dropout", type=float, default=0.2, help="res2 block dropout (if using)")
     parser.add_argument("--rese1_dropout", type=float, default=0.2, help="rese1 block dropout (if using)")
@@ -213,7 +246,7 @@ if __name__ == "__main__":
     parser.add_argument("--to_time", type=bool, default=True, help="time inference/back prop")
     parser.add_argument("--to_graph", type=bool, default=True, help="save graphs")
     parser.add_argument("--to_res", type=bool, default=True, help="save result (textual) data")
-    parse.add_argument("--train_phase", type=str, default="base_init", help="specify training phase")
+    parser.add_argument("--train_phase", type=str, default="base_init", help="specify training phase")
 
     args = parser.parse_args()
     #print(args)
@@ -231,8 +264,12 @@ if __name__ == "__main__":
     strided_list = [(1,3,128,3)]
     #res1_list = [(2,3,128,3), (7,3,256,3),(1,2,256,2), (1,2,512,2)]
     res1_list = []
-    res2_list = [(2,3,128,3), (7,3,256,3),(1,2,512,2)]
-    #res2_list = []
+    #res2_list = [(2,3,128,3), (7,3,256,3),(1,2,512,2)]
+    #rese2_list = []
+    rese2_list = [(2,3,128,3), (7,3,256,3),(1,2,512,2)]
+    #se_list = [(2,3,128,3), (7,3,256,3),(1,2,512,2)]
+    se_list = []
+    res2_list = []
     simple_list = []
     # middle dim according to (1) is same as num channels
     num_classes_total = 50
@@ -245,7 +282,7 @@ if __name__ == "__main__":
     if torch.cuda.is_available() == True:
         device = 'cuda'
 
-    model = SampCNNModel(in_ch=1, strided_list=strided_list, basic_list=[], res1_list=res1_list, res2_list=res2_list, se_list=[], rese1_list=[], rese2_list=[], simple_list=simple_list, res1_dropout=args.res1_dropout, res2_dropout=args.res2_dropout, rese1_dropout=args.rese1_dropout, rese2_dropout=args.rese2_dropout,simple_dropout=args.simple_dropout, se_fc_alpha=2.**(-3), rese1_fc_alpha=2.**(-3), rese2_fc_alpha=2.**(-3), num_classes=num_classes_total, sr=args.sr).to(device)
+    model = SampCNNModel(in_ch=1, strided_list=strided_list, basic_list=[], res1_list=res1_list, res2_list=res2_list, se_list=se_list, rese1_list=[], rese2_list=rese2_list, simple_list=simple_list, se_dropout=args.se_dropout, res1_dropout=args.res1_dropout, res2_dropout=args.res2_dropout, rese1_dropout=args.rese1_dropout, rese2_dropout=args.rese2_dropout,simple_dropout=args.simple_dropout, se_fc_alpha=args.se_fc_alpha, rese1_fc_alpha=args.rese1_fc_alpha, rese2_fc_alpha=args.rese2_fc_alpha, num_classes=num_classes_total, sr=args.sr).to(device)
     if ".pth" in args.load_emb:
         load_file = args.load_emb
         expr_idx = int(load_file.split(os.sep)[-1].split("-")[0])
@@ -256,12 +293,15 @@ if __name__ == "__main__":
         model.classifier.load_state_dict(torch.load(args.load_cls))
     if args.to_res == True:
         settings_dict = {"lr": args.lr, "bs": args.bs, "epochs": args.epochs, "sr": args.sr,
+                "se_dropout": args.se_dropout,
                 "res1_dropout": args.res1_dropout, "res2_dropout": args.res2_dropout,
                 "rese1_dropout": args.rese1_dropout, "rese2_dropout": args.res2_dropout,
-                "simple_dropout": args.simple_dropout, "use_class_weights": args.use_class_weights
+                "simple_dropout": args.simple_dropout, "use_class_weights": args.use_class_weights,
+                "se_fc_alpha": args.se_fc_alpha, "rese1_fc_alpha": args.rese1_fc_alpha, "rese2_fc_alpha": args.rese2_fc_alpha, 
+                "label_smoothing": args.label_smoothing
                 }
         UR.settings_csv_writer(settings_dict, dest_dir = args.res_dir, expr_idx = expr_idx, expr_name="sampcnn_base")
 
     #print(model.embedder.state_dict())
-    runner(model, train_phase = t_ph,expr_idx = expr_idx, lr=args.lr, bs=args.bs, epochs=args.epochs, save_ivl = args.save_ivl, sr = args.sr, max_samp = max_samp, use_class_weights = args.use_class_weights, num_classes_total = num_classes_total,
+    runner(model, train_phase = t_ph,expr_idx = expr_idx, lr=args.lr, bs=args.bs, epochs=args.epochs, save_ivl = args.save_ivl, sr = args.sr, max_samp = max_samp, use_class_weights = args.use_class_weights, num_classes_total = num_classes_total, label_smoothing = args.label_smoothing,
             res_dir=args.res_dir, save_dir=args.save_dir, to_print=args.to_print, to_time=args.to_time, data_dir=args.data_dir, to_graph=args.to_graph, to_res=args.to_res, device=device)

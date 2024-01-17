@@ -9,7 +9,7 @@ import re
 def settings_csv_writer(settings_dict, dest_dir="res", expr_idx = 0, epoch_idx=0, expr_name="sampcnn_dfsl"):
     fname = f"{expr_idx}-{expr_name}-settings.csv"
     fpath = os.path.join(dest_dir, fname)
-    header = ["sr", "lr", "bs", "epochs", "res1_dropout", "res2_dropout", "rese1_dropout", "rese2_dropout", "simple_dropout", "use_class_weights"] 
+    header = ["sr", "lr", "bs", "epochs", "label_smoothing", "se_dropout", "res1_dropout", "res2_dropout", "rese1_dropout", "rese2_dropout", "simple_dropout", "se_fc_alpha", "rese1_fc_alpha", "rese2_fc_alpha", "use_class_weights"] 
     with open(fpath, "w", newline='', encoding='utf-8') as f:
         dw = csv.DictWriter(f, fieldnames=header)
         dw.writeheader()

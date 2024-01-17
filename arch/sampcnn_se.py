@@ -6,15 +6,19 @@ from torch import nn
 # (2) Lee, J., Park, J., Kim, K. L, and Nam, J. (2018). SampleCNN: End-to-End Deep Convolutional Neural Networks Using Very Small Filters for Music Classification. Applied Sciences 8(1). https://doi.org/10.3390/app8010150
 # (3) Kim, T., Lee, J., and Nam, J. (2019). Comparison and Analysis of SampleCNN Architectures for Audio Classification. IEEE Journal of Selected Topics in Signal Processing 13(2), 285-297. https://doi.org/10.1109/JSTSP.2019.2909479
 
+# modifying to include a dropout layer
 class SampCNNSE(nn.Module):
-    def __init__(self, conv_in = 1, conv_out = 1, conv_ks = 3, mp_ks=3, mp_stride=3,md_pad=0, md_dil=1,fc_alpha=2**4, omit_last_relu = False):
+    def __init__(self, conv_in = 1, conv_out = 1, conv_ks = 3, mp_ks=3, mp_stride=3,md_pad=0, md_dil=1, dropout = 0.2, fc_alpha=2**4, omit_last_relu = False):
         fc_indim = int(conv_out * fc_alpha)
         self.layers = nn.Sequential(
                 nn.Conv1d(conv_in, conv_out. conv_ks, stride=1, padding='same',dilation=1),
-                nn.BatchNorm1d(conv_out,eps=1e-5,momentum=0.1),
-                nn.ReLU(),
-                nn.MaxPool1d(mp_ks,mp_stride,mp_pad,mp_dil)
-                )
+                nn.BatchNorm1d(conv_out,eps=1e-5,momentum=0.1))
+        if dropout > 0.:
+                self.layers.append(nn.Dropout(p=dropout))
+        if omit_last_relu == False:
+            self.layers.append(nn.ReLU())
+        self.layers.append(nn.MaxPool1d(mp_ks,mp_stride,mp_pad,mp_dil))
+                
         self.layers2 = nn.Sequential(
                 nn.AdaptiveAvgPool1d(1),
                 nn.flatten(start_dim=-2),

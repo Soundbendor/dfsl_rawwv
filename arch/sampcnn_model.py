@@ -31,7 +31,7 @@ from util.types import BatchType,TrainPhase
 
 
 class SampCNNModel(nn.Module):
-    def __init__(self, in_ch=1, strided_list=[], basic_list=[], res1_list=[], res2_list=[], se_list=[], rese1_list=[], rese2_list=[], simple_list=[], res1_dropout=0.2, res2_dropout=0.2, rese1_dropout=0.2, rese2_dropout=0.2,simple_dropout=0.5, se_fc_alpha=2.**(-3), rese1_fc_alpha=2.**(-3), rese2_fc_alpha=2.**(-3), num_classes=10, sr=44100, seed=3, train_phase = TrainPhase.base_init):
+    def __init__(self, in_ch=1, strided_list=[], basic_list=[], res1_list=[], res2_list=[], se_list=[], rese1_list=[], rese2_list=[], simple_list=[], se_dropout=0.2, res1_dropout=0.2, res2_dropout=0.2, rese1_dropout=0.2, rese2_dropout=0.2,simple_dropout=0.5, se_fc_alpha=2.**(-3), rese1_fc_alpha=2.**(-3), rese2_fc_alpha=2.**(-3), num_classes=10, sr=44100, seed=3, train_phase = TrainPhase.base_init):
         """
         EMBEDDER Layers (stored in self.embedder)
         strided_list: tuples of (num, ksize, out_channels, stride)
@@ -119,7 +119,7 @@ class SampCNNModel(nn.Module):
         for (num,ks,ch,s) in se_list:
             for i in range(num):
                 cstr = f"se{num_se}" 
-                cmodel = SampCNNSE(conv_in = prev_ch, conv_out = ch, conv_ks = ks, mp_ks=ks, mp_stride=s,fc_alpha=se_fc_alpha, omit_last_relu=((i == num-1) and se_isfinal))
+                cmodel = SampCNNSE(conv_in = prev_ch, conv_out = ch, conv_ks = ks, mp_ks=ks, mp_stride=s,fc_alpha=se_fc_alpha, dropout = se_dropout, omit_last_relu=((i == num-1) and se_isfinal))
                 ctup = (cstr, cmodel)
                 prev_ch = ch
                 num_se += 1
@@ -140,9 +140,9 @@ class SampCNNModel(nn.Module):
 
         num_rese2 = 0
         for (num,ks,ch,s) in rese2_list:
-            for i in range(n):
+            for i in range(num):
                 cstr = f"resetwo{num_rese2}" 
-                cmodel = SampCNNReSEN(n=2,conv_in = prev_ch, conv_out = ch, conv_ks = ks, dropout=rese2_dropout, mp_ks=ks, mp_stride=s,fc_alpha=rese2_fc_alpha, use_se=True, omit_last_relu=((i == num-1) and rese2_isfinal))
+                cmodel = SampCNNResN(n=2,conv_in = prev_ch, conv_out = ch, conv_ks = ks, dropout=rese2_dropout, mp_ks=ks, mp_stride=s,fc_alpha=rese2_fc_alpha, use_se=True, omit_last_relu=((i == num-1) and rese2_isfinal))
                 ctup = (cstr, cmodel)
                 prev_ch = ch
                 num_rese2 += 1
@@ -169,7 +169,7 @@ class SampCNNModel(nn.Module):
         
         # output of embedder should be (n, prev_ch, 1)
         # middle dim according to (1) is same as num channels
-
+        
         self.classifier = WeightGenCls(num_classes = num_classes, dim=prev_ch, seed=seed, train_phase=TrainPhase.base_init)
         """
         self.classifier = nn.Sequential()
@@ -180,13 +180,26 @@ class SampCNNModel(nn.Module):
             self.classifier.append(nn.ReLU())
             self.classifier.append(nn.Linear(fc_dim, num_classes))
         """
-    
-    def set_pseudonovel_vec(self, k_novel_idxs, k_novel_sz, k_novel_ex):
+  
+    def set_train_phase(self, cur_tp):
+        self.classifier.set_train_phase(cur_tp)
+
+    def set_exclude_idxs(self, exc_idxs):
+        self.classifier.set_exclude_idxs(exc_idxs)
+
+    def clear_exclude_idxs(self):
+        self.classifier.clear_exclude_idxs()
+
+    def set_pseudonovel_vec(self, k_novel_idx, k_novel_ex):
+        # k_novel_ex should be of size (k_novel, input_dim)
+        k_novel_ft = self.flatten(self.embedder(k_novel_ex))
+        self.classifier.set_pseudonovel_vec(k_novel_idx, k_novel_ft)
+
+    def set_pseudonovel_vecs(self, k_novel_idxs, k_novel_sz, k_novel_exs):
         # k_novel_idxs should be of size k_novel
         # k_novel_ex should be of size (all_sizes, input_dim)
-        with torch.no_grad():
-            k_novel_ft = self.flatten(self.embedder(cur_ipt))
-            self.classifier.set_pseudonovel_vec(k_novel_idxs,k_novel_ft)
+        k_novel_fts = self.flatten(self.embedder(k_novel_exs))
+        self.classifier.set_pseudonovel_vecs(k_novel_idxs,k_novel_fts)
 
     def forward(self, cur_ipt):
         emb_out = self.embedder(cur_ipt)

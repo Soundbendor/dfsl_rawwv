@@ -39,10 +39,10 @@ class SampCNNResN(nn.Module):
         if use_se == True:
             self.layers_se = nn.Sequential(
                     nn.AdaptiveAvgPool1d(1),
-                    nn.flatten(start_dim=-2),
+                    nn.Flatten(start_dim=-2),
                     nn.Linear(conv_out, fc_indim),
                     nn.ReLU(),
-                    nn.Linear(fc_indim, conv2_out),
+                    nn.Linear(fc_indim, conv_out),
                     nn.Sigmoid()
                     )
      
