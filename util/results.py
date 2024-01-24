@@ -5,11 +5,12 @@ import numpy as np
 import os
 from util.types import BatchType
 import re
+import util.metrics as UM
 
 def settings_csv_writer(settings_dict, dest_dir="res", expr_idx = 0, epoch_idx=0, expr_name="sampcnn_dfsl"):
     fname = f"{expr_idx}-{expr_name}-settings.csv"
     fpath = os.path.join(dest_dir, fname)
-    header = ["sr", "lr", "bs", "epochs", "label_smoothing", "se_dropout", "res1_dropout", "res2_dropout", "rese1_dropout", "rese2_dropout", "simple_dropout", "se_fc_alpha", "rese1_fc_alpha", "rese2_fc_alpha", "use_class_weights"] 
+    header = ["expr_idx", "sr", "lr", "bs", "epochs", "label_smoothing", "se_dropout", "res1_dropout", "res2_dropout", "rese1_dropout", "rese2_dropout", "simple_dropout", "se_fc_alpha", "rese1_fc_alpha", "rese2_fc_alpha", "use_class_weights", "omit_last_relu", "use_prelu", "se_prelu"] 
     with open(fpath, "w", newline='', encoding='utf-8') as f:
         dw = csv.DictWriter(f, fieldnames=header)
         dw.writeheader()
@@ -20,19 +21,20 @@ def res_csv_appender(resdict, dest_dir="res", expr_idx = 0, epoch_idx=0, batch_t
     if pretrain == True:
         fname = f"{expr_idx}-{expr_name}-res_pretrain.csv"
     fpath = os.path.join(dest_dir, fname)
-    header = ["epoch_idx","batch_type","epoch_avg_loss","epoch_avg_time", "epoch_avg_acc1", "epoch_avg_ap"]
+    header = ["epoch_idx","batch_type","loss_avg","time_avg"]
+    header += UM.csvable 
     first_write = epoch_idx == 0 and batch_type == BatchType.train
     write_qual = "a" if pretrain == False else "w"
     with open(fpath, write_qual, newline='', encoding='utf-8') as f:
         dw = csv.DictWriter(f, fieldnames=header)
         if first_write == True or pretrain == True:
             dw.writeheader()
-        dw.writerow(resdict)
+        dw.writerow({k:v for k,v in resdict.items() if k in header})
 
 def title_from_key(cur_str):
     return " ".join([x.capitalize() for x in cur_str.split("_")])
 
-def train_valid_grapher(train_arr, valid_arr, dest_dir="graph", graph_key="epoch_avg_loss", expr_idx=0, expr_name="sampcnn_dfsl"):
+def train_valid_grapher(train_arr, valid_arr, dest_dir="graph", graph_key="loss_avg", expr_idx=0, expr_name="sampcnn_dfsl"):
     gtype = graph_key.split("_")[-1]
     fname = f"{expr_idx}-{expr_name}-{gtype}.png"
     fpath = os.path.join(dest_dir, fname)

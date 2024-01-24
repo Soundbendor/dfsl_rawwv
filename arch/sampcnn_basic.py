@@ -9,13 +9,17 @@ from torch import nn
 
 
 class SampCNNBasic(nn.Module):
-    def __init__(self, conv_in = 1, conv_out = 1, conv_ks = 3, mp_ks=3, mp_stride=3,mp_pad=0, mp_dil=1, omit_last_relu = False):
+    def __init__(self, conv_in = 1, conv_out = 1, conv_ks = 3, mp_ks=3, mp_stride=3,mp_pad=0, mp_dil=1, omit_last_relu = False, use_prelu = True):
         self.omit_last_relu = omit_last_relu
         self.layers = nn.Sequential(
                 nn.Conv1d(conv_in, conv_out, conv_ks, stride=1, padding="same",dilation=1),
                 nn.BatchNorm1d(conv_out,eps=1e-5,momentum=0.1))
         if omit_last_relu == False:
-            self.layers.append(nn.ReLU())
+            if use_prelu == True:
+                self.layers.append(nn.PReLU())
+            else:
+                self.layers.append(nn.ReLU())
+
         self.layers.append(nn.MaxPool1d(mp_ks,mp_stride,mp_pad,mp_dil))
 
     

@@ -8,7 +8,7 @@ from torch import nn
 
 # modifying to include a dropout layer
 class SampCNNSE(nn.Module):
-    def __init__(self, conv_in = 1, conv_out = 1, conv_ks = 3, mp_ks=3, mp_stride=3,md_pad=0, md_dil=1, dropout = 0.2, fc_alpha=2**4, omit_last_relu = False):
+    def __init__(self, conv_in = 1, conv_out = 1, conv_ks = 3, mp_ks=3, mp_stride=3,md_pad=0, md_dil=1, dropout = 0.2, fc_alpha=2**4, omit_last_relu = False, use_prelu = True, se_prelu = False):
         fc_indim = int(conv_out * fc_alpha)
         self.layers = nn.Sequential(
                 nn.Conv1d(conv_in, conv_out. conv_ks, stride=1, padding='same',dilation=1),
@@ -16,17 +16,24 @@ class SampCNNSE(nn.Module):
         if dropout > 0.:
                 self.layers.append(nn.Dropout(p=dropout))
         if omit_last_relu == False:
-            self.layers.append(nn.ReLU())
+            if use_prelu == True:
+                self.layers.append(nn.PReLU())
+            else:
+                self.layers.append(nn.ReLU())
+
         self.layers.append(nn.MaxPool1d(mp_ks,mp_stride,mp_pad,mp_dil))
                 
         self.layers2 = nn.Sequential(
                 nn.AdaptiveAvgPool1d(1),
                 nn.flatten(start_dim=-2),
-                nn.Linear(conv_out, fc_indim),
-                nn.ReLU(),
-                nn.Linear(fc_indim, conv_out),
-                nn.Sigmoid()
-                )
+                nn.Linear(conv_out, fc_indim))
+        if se_prelu == True:
+            self.layers2.append(nn.PReLU())
+        else:
+            self.layers2.append(nn.ReLU())
+        self.layers2.append(nn.Linear(fc_indim, conv_out))
+        self.layers2.append(nn.Sigmoid())
+                
         
 
     def forward(self, cur_ipt):

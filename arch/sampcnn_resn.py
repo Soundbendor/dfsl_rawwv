@@ -10,7 +10,7 @@ from torch import nn
 # defining res-n and resen as in (1) in one class
 
 class SampCNNResN(nn.Module):
-    def __init__(self, n=1, conv_in = 1, conv_out = 1, conv_ks = 3, dropout=0.2, mp_ks=3, mp_stride=3,mp_pad=0, mp_dil=1, fc_alpha=2**4, use_se = False, omit_last_relu = False):
+    def __init__(self, n=1, conv_in = 1, conv_out = 1, conv_ks = 3, dropout=0.2, mp_ks=3, mp_stride=3,mp_pad=0, mp_dil=1, fc_alpha=2**4, use_se = False, omit_last_relu = False, use_prelu = True, se_prelu = False):
         super().__init__()
         self.n = max(n,1)
         self.use_se = use_se
@@ -30,7 +30,10 @@ class SampCNNResN(nn.Module):
             for i in range(self.n-1):
                 self.layers.append(nn.Conv1d(conv_out, conv_out, conv_ks, stride=1, padding='same',dilation=1))
                 self.layers.append(nn.BatchNorm1d(conv_out,eps=1e-5,momentum=0.1))
-                self.layers.append(nn.ReLU())
+                if use_prelu == True:
+                    self.layers.append(nn.PReLU())
+                else:
+                    self.layers.append(nn.ReLU())
                 self.layers.append(nn.Dropout(p=dropout))
 
         self.layers.append(nn.Conv1d(conv_out,conv_out,conv_ks,stride=1,padding='same',dilation=1))
@@ -40,15 +43,21 @@ class SampCNNResN(nn.Module):
             self.layers_se = nn.Sequential(
                     nn.AdaptiveAvgPool1d(1),
                     nn.Flatten(start_dim=-2),
-                    nn.Linear(conv_out, fc_indim),
-                    nn.ReLU(),
-                    nn.Linear(fc_indim, conv_out),
-                    nn.Sigmoid()
-                    )
+                    nn.Linear(conv_out, fc_indim))
+            if se_prelu == True:
+                self.layers_se.append(nn.PReLU())
+            else:
+                self.layers_se.append(nn.ReLU())
+            self.layers_se.append(nn.Linear(fc_indim, conv_out))
+            self.layers_se.append(nn.Sigmoid())
+                    
      
         self.layers2 = nn.Sequential()
         if omit_last_relu == False:
-            self.layers2.append(nn.ReLU())
+            if use_prelu == True:
+                self.layers2.append(nn.PReLU())
+            else:
+                self.layers2.append(nn.ReLU())
         self.layers2.append(nn.MaxPool1d(mp_ks,mp_stride,mp_pad,mp_dil))
 
     def forward(self, cur_ipt):

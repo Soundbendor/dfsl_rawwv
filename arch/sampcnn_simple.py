@@ -8,13 +8,16 @@ from torch import nn
 
 
 class SampCNNSimple(nn.Module):
-    def __init__(self, conv_in = 1, conv_out = 1, conv_ks=1, dropout=0.5, omit_last_relu = False):
+    def __init__(self, conv_in = 1, conv_out = 1, conv_ks=1, dropout=0.5, omit_last_relu = False, use_prelu = True):
         super().__init__()
         self.omit_last_relu = omit_last_relu
         self.layers = nn.Sequential(
                 nn.Conv1d(conv_in, conv_out, conv_ks, stride=1, padding="same",dilation=1))
         if omit_last_relu == False:
-            self.layers.append(nn.ReLU())
+            if use_prelu == True:
+                self.layers.append(nn.PReLU())
+            else:
+                self.layers.append(nn.ReLU())
         self.layers.append(nn.Dropout(p=dropout))
 
     
