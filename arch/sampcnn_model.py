@@ -1,4 +1,5 @@
 import torch
+import numpy as np
 from torch import nn
 from collections import OrderedDict
 from . import arch_util as AU
@@ -181,7 +182,33 @@ class SampCNNModel(nn.Module):
             self.classifier.append(nn.Linear(fc_dim, num_classes))
         """
   
+    def freeze_embedder(self):
+        self.embedder.requires_grad_(False)
+
+    def unfreeze_embedder(self):
+        self.embedder.requires_grad_(True)
+
+    def freeze_classifier(self):
+        self.classifier.freeze_classifier()
+
+    def unfreeze_classifier(self):
+        self.classifier.unfreeze_classifier()
+
+    def init_zarr(self, k_novel, k_samp, k_dim, device='cpu'):
+        self.zarr = torch.zeros((k_novel, k_samp, k_dim), requires_grad=False).to(device)
+        self.zclass = np.zeros(k_novel, dtype=int)
+        self.zidx = 0
+
     def set_train_phase(self, cur_tp):
+        if cur_tp == TrainPhase.base_weightgen:
+            self.freeze_embedder()
+            self.freeze_classifier()
+        else:
+            self.unfreeze_embedder()
+            self.unfreeze_classifier()
+            self.zarr = None
+            self.zavg = None
+            self.zclass = None
         self.classifier.set_train_phase(cur_tp)
 
     def set_exclude_idxs(self, exc_idxs):
@@ -190,8 +217,26 @@ class SampCNNModel(nn.Module):
     def clear_exclude_idxs(self):
         self.classifier.clear_exclude_idxs()
 
+    def reset_copies(self):
+        self.classifier.reset_copies()
+
+    def set_zarr(self, k_novel_samp, k_novel_idx):
+        k_novel_ft = self.flatten(self.embedder(k_novel_samp))
+        self.zarr[self.zidx] = k_novel_ft
+        self.zclass[self.zidx] = k_novel_idx
+        self.zidx += 1
+
+    def calc_pseudonovel_vecs(self):
+        self.zavg = torch.mean(self.zarr, dim=1)
+        self.zavg.requires_grad_(False)
+        self.watt = torch.zeros_like(self.zavg)
+        for i in range(self.zavg.shape[0]):
+            self.watt[i] = self.classifier.calc_w_att(self.zarr[i])
+        self.classifier.calc_pseudonovel_vecs(self.zarr,self.zavg, self.zclass, self.watt)
+
     def set_pseudonovel_vec(self, k_novel_idx, k_novel_ex):
         # k_novel_ex should be of size (k_novel, input_dim)
+        #print(k_novel_ex.type())
         k_novel_ft = self.flatten(self.embedder(k_novel_ex))
         self.classifier.set_pseudonovel_vec(k_novel_idx, k_novel_ft)
 

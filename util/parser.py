@@ -1,0 +1,42 @@
+import argparse
+import util.globals as UG
+from distutils.util import strtobool
+
+def parse_args():
+    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument("-lr", "--learning_rate", type=float, default=2.5e-4, help="learning rate")
+    parser.add_argument("-sr", "--sample_rate", type=int, default=16000, help="sample rate")
+    parser.add_argument("-bs", "--batch_size", type=int, default=5, help="batch size")
+    parser.add_argument("-e", "--epochs", type=int, default=40, help="number of epochs")
+    parser.add_argument("--use_class_weights", type=strtobool, default=False, help="use class weights to weight loss function")
+    parser.add_argument("--label_smoothing", type=float, default=0.0, help="label smoothing for loss function)")
+    parser.add_argument("--se_fc_alpha", type=float, default=2.e1, help="se alpha param for linear layer (if using)")
+    parser.add_argument("--rese1_fc_alpha", type=float, default=2.e1, help="rese1 alpha param for linear layer (if using)")
+    parser.add_argument("--rese2_fc_alpha", type=float, default=2.e1, help="rese2 alpha param for linear layer (if using)")
+    parser.add_argument("--se_dropout", type=float, default=0.5, help="se block dropout (if using)")
+    parser.add_argument("--res1_dropout", type=float, default=0.5, help="res1 block dropout (if using)")
+    parser.add_argument("--res2_dropout", type=float, default=0.5, help="res2 block dropout (if using)")
+    parser.add_argument("--rese1_dropout", type=float, default=0.5, help="rese1 block dropout (if using)")
+    parser.add_argument("--rese2_dropout", type=float, default=0.5, help="rese2 block dropout (if using)")
+    parser.add_argument("--simple_dropout", type=float, default=0.5, help="simple block dropout (if using)")
+    parser.add_argument("-si", "--save_ivl", type=int, default=0, help="(epoch interval) to save model (<= 0: don't save)")
+    parser.add_argument("--data_dir", type=str, default=UG.DEF_DATADIR, help="base folder of dataset")
+    parser.add_argument("--save_dir", type=str, default=UG.DEF_SAVEDIR, help="save directory")
+    parser.add_argument("--res_dir", type=str, default=UG.DEF_RESDIR, help="results (textual) directory")
+    parser.add_argument("--graph_dir", type=str, default=UG.DEF_GRAPHDIR, help="graph directory")
+    parser.add_argument("--load_emb", type=str, default='', help="load embedder with given pth file")
+    parser.add_argument("--load_cls", type=str, default='', help="load classifier with given pth file")
+    parser.add_argument("-lm", "--load_model_by_tup", type=str, default="-1,-1", help='load embedder and classifier by given "(expr_idx,number)"')
+    parser.add_argument("-md", "--model_dir", type=str, default=UG.DEF_BASEDIR, help='specify model directory')
+    parser.add_argument("--omit_last_relu", type=strtobool, default=False, help="omit last relu from last conv block")
+    parser.add_argument("--use_prelu", type=strtobool, default=True, help="use prelu after conv blocks (still relu for SE blocks)")
+    parser.add_argument("--se_prelu", type=strtobool, default=False, help="use prelu in SE blocks")
+    parser.add_argument("--to_print", type=strtobool, default=True, help="print progress")
+    parser.add_argument("--to_time", type=strtobool, default=True, help="time inference/back prop")
+    parser.add_argument("--to_graph", type=strtobool, default=True, help="save graphs")
+    parser.add_argument("--to_res", type=strtobool, default=True, help="save result (textual) data")
+    parser.add_argument("--to_nep", type=strtobool, default=True, help="use neptune")
+    parser.add_argument("--train_phase", type=str, default="base_init", help="specify training phase")
+
+    args = parser.parse_args()
+    return args

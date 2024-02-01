@@ -10,7 +10,8 @@ import torchaudio.transforms as TXT
 #Piczak, K.J. (2015). ESC: Dataset for Environmental Sound Classification. In Proceedings of the 23rd ACM International Conference on Multimedia. https://doi.org/10.1145/2733373.2806390
 # should be 5 second samples as 44100
 
-# 8 classes per fold and 5 folds total
+# 40 examples total
+# 8 examples per fold and 5 folds total
 class ESC50(Dataset):
     def __init__(self, folds=[1,2,3,4,5], classes=list(range(50)), k=80, srate=44100, samp_sz=236196, basefolder = os.path.join(os.path.split(__file__)[0], "ESC-50-master"), seed = 3):
         self.basepath = basefolder
@@ -37,7 +38,7 @@ class ESC50(Dataset):
         return self.classes
 
     def get_class_ex_idxs(self, class_idx):
-        return self.df.where(self.df["target"] == class_idx).dropna().index
+        return self.dfsub.where(self.dfsub["target"] == class_idx).dropna().index
         
     def __getitem__(self, idx):
         # return sound, label
