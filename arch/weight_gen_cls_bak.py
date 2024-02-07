@@ -11,21 +11,23 @@ from util.types import BatchType,TrainPhase
 # (2) Gidaris, S. and Komodakis, N. (2018). Dynamic Few-Shot Visual Learning Without Forgetting. In Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR) 2018, (pp. 4367-4375). https://openaccess.thecvf.com/content_cvpr_2018/html/Gidaris_Dynamic_Few-Shot_Visual_CVPR_2018_paper.html.
 # (3) Gidaris, S. (2019). FewShotWithoutForgetting [Github Repository]. Github. https://github.com/gidariss/FewShotWithoutForgetting/ 
 class WeightGenCls(nn.Module):
-    def __init__(self, num_classes = 30, dim=512, seed=3, exclude_idxs = [], train_phase=TrainPhase.base_init, cls_fn = 'cos_sim'):
+    def __init__(self, num_classes = 50, dim=512, seed=3, base_idxs = [], novel_idxs = [], exclude_idxs = [], train_phase=TrainPhase.base_init):
         super().__init__()
         torch.manual_seed(seed)
 
         self.train_phase = train_phase
         self.num_classes = num_classes
         self.dim = dim
-        #self.base_classes = base_idxs
+        self.base_classes = base_idxs
+        self.novel_classes = np.setdiff1d(np.arange(self.num_classes,dtype=int), base_idxs)
         sdev = torch.sqrt(torch.tensor(2.0/dim)) # from (3)
         cls_vec = torch.randn(num_classes,dim) * sdev # from(3)
         #cls_vec = torch.zeros(num_classes,dim)
         #self.cls_vec = Parameter(nn.init.xavier_normal_(cls_vec)) # idea from (3)
         self.cls_vec = Parameter(cls_vec) # idea from (3)
+        self.num_base_classes = 0
+        self.num_novel_classes = 0
         #from (2)
-        self.cls_fn = 'cos_sim'
         tau = torch.tensor(10.)
         gamma = torch.tensor(10.)
         self.tau = Parameter(tau)
@@ -68,6 +70,15 @@ class WeightGenCls(nn.Module):
 
     def clear_exclude_idxs(self):
         self.exclude_idxs.clear()
+
+    def set_base_class_idxs(self, idxs):
+        self.base_classes = idxs
+        self.num_base_classes = len(idxs)
+        self.novel_classes = np.setdiff1d(np.arange(self.num_classes,dtype=int), idxs)
+        self.num_novel_classes = self.novel_classes.shape[0]
+        self.k_b.requires_grad_(False)
+        self.k_b[self.novel_classes] = 0.
+        self.k_b.requires_grad_(True)
 
     def cos_sim(self, ipt1, ipt2):
         ret = torch.matmul(nn.functional.normalize(ipt1,dim=1), nn.functional.normalize(ipt2, dim=1).T)
@@ -117,7 +128,9 @@ class WeightGenCls(nn.Module):
         self.include_idxs = idxs
 
     def calc_mask(self, to_mask):
-        cur_mask = torch.ones_like(to_mask, requires_grad = False)
+        cur_mask = torch.zeros_like(to_mask, requires_grad = False)
+        if len(self.base_classes) > 0:
+            cur_mask[self.base_classes] = 1.
         if len(self.include_idxs) > 0:
             cur_mask[self.include_idxs] = 1.
         if len(self.exclude_idxs) > 0:
@@ -179,16 +192,6 @@ class WeightGenCls(nn.Module):
         for i in range(zarrs.shape[0]):
             self.cls_vec_copy[zclasses[i]] = self.calc_w_n_plus_1_2(zarrs[i], zavgs[i], watt[i])
 
-    def rev_euc_dist(self, ipt, cls_vec):
-        # cdist (b,p,m) x (b,r,m) = (b,p,r)
-        # (?, bs=p,nc=r)
-        # input is (bs, num_channels) = ie (5, 512)
-        # compare to (num_classes, num_channels) which is cls_vec
-        # output should be (bs, num_classes) = ie (5, 30)
-        ret = torch.cdist(ipt, cls_vec)
-        ret = nn.functional.normalize(ret, dim=1,p=1)
-        return (1. - ret)
-
     def set_pseudonovel_vecs(self, k_novel_idxs, k_novel_sz, k_novel_fts):
         # k_novel_idxs should be of size k_novel
         # k_novel_ft should be of size (all_sizes, dim)
@@ -202,28 +205,19 @@ class WeightGenCls(nn.Module):
     def forward(self, ipt):
         # input should be (bs, num_channels)
         # return classifier cosine similarity scores
-        ret = None
+        
         if self.train_phase == TrainPhase.base_init:
         #idea from (3)
             cur_mask = self.calc_mask(self.cls_vec)
-            if self.cls_fn == 'cos_sim':
-                ret = self.tau * self.cos_sim(ipt,self.apply_mask(self.cls_vec, cur_mask))
-            else:
-                ret = self.rev_euc_dist(ipt,self.apply_mask(self.cls_vec, cur_mask))
+            ret = self.tau * self.cos_sim(ipt,self.apply_mask(self.cls_vec, cur_mask))
             #ret = self.cos_sim(ipt,self.apply_mask(self.cls_vec, cur_mask))
+            return ret
         elif self.train_phase == TrainPhase.base_weightgen:
-            if self.cls_fn == 'cos_sim':
-                ret = self.tau * self.cos_sim(ipt,self.cls_vec_copy)
-            else:
-                ret = self.rev_euc_dist(ipt,self.cls_vec_copy)
+            ret = self.tau * self.cos_sim(ipt,self.cls_vec_copy)
             #ret = self.cos_sim(ipt,self.cls_vec_copy)
+            return ret
         else:
-            if self.cls_fn == 'cos_sim':
-                ret = self.tau * self.cos_sim(ipt, self.cls_vec)
-            else:
-
-                ret = self.rev_euc_dist(ipt,self.cls_vec)
+            ret = self.tau * self.cos_sim(ipt, self.cls_vec)
             #ret = self.cos_sim(ipt, self.cls_vec)
-        #print(ret)
-        return ret
+            return ret
         # should be (bs, num_channels) x (num_channels, num_classes) = (bs, num_classes)

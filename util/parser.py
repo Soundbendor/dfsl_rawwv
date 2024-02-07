@@ -5,9 +5,11 @@ from distutils.util import strtobool
 def parse_args():
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("-lr", "--learning_rate", type=float, default=2.5e-4, help="learning rate")
+    parser.add_argument("-cf", "--cls_fn", type=str, default='cos_sim', help="classifier fn")
     parser.add_argument("-sr", "--sample_rate", type=int, default=16000, help="sample rate")
     parser.add_argument("-bs", "--batch_size", type=int, default=5, help="batch size")
     parser.add_argument("-e", "--epochs", type=int, default=40, help="number of epochs")
+    parser.add_argument("-ml", "--multilabel", type=strtobool, default=True, help="is multilabel")
     parser.add_argument("--use_class_weights", type=strtobool, default=False, help="use class weights to weight loss function")
     parser.add_argument("--label_smoothing", type=float, default=0.0, help="label smoothing for loss function)")
     parser.add_argument("--se_fc_alpha", type=float, default=2.e1, help="se alpha param for linear layer (if using)")
@@ -36,7 +38,8 @@ def parse_args():
     parser.add_argument("--to_graph", type=strtobool, default=True, help="save graphs")
     parser.add_argument("--to_res", type=strtobool, default=True, help="save result (textual) data")
     parser.add_argument("--to_nep", type=strtobool, default=True, help="use neptune")
-    parser.add_argument("--train_phase", type=str, default="base_init", help="specify training phase")
+    parser.add_argument("-tp", "--train_phase", type=str, default="base_init", help="specify training phase")
+
 
     args = parser.parse_args()
     return args

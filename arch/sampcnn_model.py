@@ -32,7 +32,7 @@ from util.types import BatchType,TrainPhase
 
 
 class SampCNNModel(nn.Module):
-    def __init__(self, in_ch=1, strided_list=[], basic_list=[], res1_list=[], res2_list=[], se_list=[], rese1_list=[], rese2_list=[], simple_list=[], se_dropout=0.2, res1_dropout=0.2, res2_dropout=0.2, rese1_dropout=0.2, rese2_dropout=0.2,simple_dropout=0.5, se_fc_alpha=2.**(-3), rese1_fc_alpha=2.**(-3), rese2_fc_alpha=2.**(-3), num_classes=10, sr=44100, seed=3, omit_last_relu = True, train_phase = TrainPhase.base_init, use_prelu = True, se_prelu = False):
+    def __init__(self, in_ch=1, strided_list=[], basic_list=[], res1_list=[], res2_list=[], se_list=[], rese1_list=[], rese2_list=[], simple_list=[], se_dropout=0.2, res1_dropout=0.2, res2_dropout=0.2, rese1_dropout=0.2, rese2_dropout=0.2,simple_dropout=0.5, se_fc_alpha=2.**(-3), rese1_fc_alpha=2.**(-3), rese2_fc_alpha=2.**(-3), num_classes=10, sr=44100, seed=3, omit_last_relu = True, train_phase = TrainPhase.base_init, use_prelu = True, se_prelu = False, cls_fn = 'cos_sim'):
         """
         EMBEDDER Layers (stored in self.embedder)
         strided_list: tuples of (num, ksize, out_channels, stride)
@@ -171,7 +171,7 @@ class SampCNNModel(nn.Module):
         # output of embedder should be (n, prev_ch, 1)
         # middle dim according to (1) is same as num channels
         
-        self.classifier = WeightGenCls(num_classes = num_classes, dim=prev_ch, seed=seed, train_phase=TrainPhase.base_init)
+        self.classifier = WeightGenCls(num_classes = num_classes, dim=prev_ch, seed=seed, train_phase=TrainPhase.base_init, cls_fn=cls_fn)
         """
         self.classifier = nn.Sequential()
         if use_classifier == True:

@@ -1,4 +1,5 @@
 from util.types import BatchType,TrainPhase
+import util.metrics as UM
 """
 def nep_batch_parser_old(cur_nep, cur_dict,batch_type=BatchType.train, train_phase = TrainPhase.base_init):
     base_str = f"{train_phase.name}/{batch_type.name}"
@@ -11,7 +12,8 @@ def nep_batch_parser_old(cur_nep, cur_dict,batch_type=BatchType.train, train_pha
 def nep_batch_parser(cur_nep, cur_dict, batch_type=BatchType.train, train_phase = TrainPhase.base_init):
     base_str = f"{train_phase.name}/{batch_type.name}"
     for k,v in cur_dict.items():
-        cur_nep[f"{base_str}/{k}"].append(v)
+        if k not in UM.ignorekeys:
+            cur_nep[f"{base_str}/{k}"].append(v)
 
 def nep_confmat_upload(cur_nep, fpath, batch_type=BatchType.train, train_phase = TrainPhase.base_init):
     base_str = f"{train_phase.name}/{batch_type.name}"
