@@ -143,18 +143,10 @@ class CNN14Model(nn.Module):
         emb_out = self.embedder(txed)
         #print(emb_out.shape)
         
-        # borrowing format of (1)
-
-        # mean over width
+        # borrowing format of (1), this is the global pooling mentioned in (2)
         cmean_w = torch.mean(emb_out, dim=3)
-
-        #max over height, take values
-        cmax_h = torch.max(cmean_w, dim=2)[0]
-
-        # mean over height
+        cmax_h = torch.max(cmean_w, dim=2)[0] # returns tuple of values and indices
         cmean_h = torch.mean(cmean_w, dim=2)
-        
-        # add together
         cm_out = cmax_h + cmean_h 
 
         #flat_out = self.flatten(cm_out)
