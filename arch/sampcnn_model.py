@@ -248,7 +248,9 @@ class SampCNNModel(nn.Module):
 
     def forward(self, cur_ipt):
         emb_out = self.embedder(cur_ipt)
+        #print(emb_out.shape)
         flat_out = self.flatten(emb_out)
+        #print(flat_out.shape)
         net_out = self.classifier(flat_out)
         return net_out
         #print(emb_out.shape)

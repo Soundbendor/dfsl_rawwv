@@ -5,6 +5,7 @@ from torch import nn
 from torch.utils.data import DataLoader,Subset
 from torch import cuda
 from arch.sampcnn_model import SampCNNModel
+from arch.cnn14_model import CNN14Model
 from ds.esc50 import ESC50 
 import os
 import argparse
@@ -16,6 +17,7 @@ import util.metrics as UM
 import util.nep as UN
 import util.globals as UG
 import util.parser as UP
+import tomllib
 from distutils.util import strtobool
 import neptune
 from ast import literal_eval as make_tuple
@@ -107,12 +109,14 @@ def batch_handler(model, dloader, cur_losser, cur_opter=None, batch_type = Batch
         model.eval()
     with (torch.no_grad() if train == False else contextlib.nullcontext()):
         for batch_idx, (ci,cl) in enumerate(dloader):
+            #print(ci.shape, cl.shape)
             pred = model(ci.to(device))
             #print(bs, pred.shape)
             #print(ci.shape)
             #print(cl.shape)
             #print(cl)
             cur_loss = cur_losser(pred, cl.to(torch.float).to(device))
+            #print(pred.shape)
             loss_item = cur_loss.item()
             if train ==True and train_phase != TrainPhase.base_weightgen:
                 cur_loss.backward()
@@ -306,9 +310,9 @@ if __name__ == "__main__":
     expr_idx = int(time.time() * 1000)
     args = UP.parse_args()
     #print(args)
-    make_folder(args.save_ivl > 0, args.save_dir) 
-    make_folder(args.to_graph, args.graph_dir) 
-    make_folder(args.to_res, args.res_dir) 
+    make_folder(args["save_ivl"] > 0, args["save_dir"]) 
+    make_folder(args["to_graph"], args["graph_dir"]) 
+    make_folder(args["to_res"], args["res_dir"]) 
     #(num,ksize,stride) = (10,3,3),(2,2,2) gives 236196 which is 15696 extra samples 
     # (includes starting strided conv and following regular conv with strided maxpool)
     # but doesn't include 1 channel conv
@@ -336,24 +340,30 @@ if __name__ == "__main__":
     #max_samp = 118098
     max_samp = 177147
 
-    if args.train_phase == "base_weightgen":
+    if args["train_phase"] == "base_weightgen":
         t_ph = TrainPhase.base_weightgen
     if torch.cuda.is_available() == True:
         device = 'cuda'
 
-    model = SampCNNModel(in_ch=1, strided_list=strided_list, basic_list=[], res1_list=res1_list, res2_list=res2_list, se_list=se_list, rese1_list=[], rese2_list=rese2_list, simple_list=simple_list, se_dropout=args.se_dropout, res1_dropout=args.res1_dropout, res2_dropout=args.res2_dropout, rese1_dropout=args.rese1_dropout, rese2_dropout=args.rese2_dropout,simple_dropout=args.simple_dropout, se_fc_alpha=args.se_fc_alpha, rese1_fc_alpha=args.rese1_fc_alpha, rese2_fc_alpha=args.rese2_fc_alpha, num_classes=num_classes_base, sr=args.sample_rate, omit_last_relu = args.omit_last_relu, use_prelu = args.use_prelu, se_prelu=args.se_prelu, cls_fn = args.cls_fn).to(device)
+    model = None
 
-    load_emb = args.load_emb
-    load_cls = args.load_cls
-    if is_valid_tup(args.load_model_by_tup) == True:
-        (expr_idx,num) = make_tuple(args.load_model_by_tup)
-        load_cls_fname = f"{expr_idx}-sampcnn_classifier_{num}-model.pth"
-        load_emb_fname = f"{expr_idx}-sampcnn_embedder_{num}-model.pth"
-        load_emb = os.path.join(args.model_dir, load_emb_fname)
-        load_cls = os.path.join(args.model_dir, load_cls_fname)
+    if args["model"] == "samplecnn":
+        model = SampCNNModel(in_ch=1, strided_list=strided_list, basic_list=[], res1_list=res1_list, res2_list=res2_list, se_list=se_list, rese1_list=[], rese2_list=rese2_list, simple_list=simple_list, se_dropout=args["se_dropout"], res1_dropout=args["res1_dropout"], res2_dropout=args["res2_dropout"], rese1_dropout=args["rese1_dropout"], rese2_dropout=args["rese2_dropout"],simple_dropout=args["simple_dropout"], se_fc_alpha=args["se_fc_alpha"], rese1_fc_alpha=args["rese1_fc_alpha"], rese2_fc_alpha=args["rese2_fc_alpha"], num_classes=num_classes_base, sr=args["sample_rate"], omit_last_relu = args["omit_last_relu"], use_prelu = args["use_prelu"], se_prelu=args["se_prelu"], cls_fn = args["cls_fn"]).to(device)
+    else:
+        
+        model = CNN14Model(in_ch=1, num_classes=num_classes_base, sr=args["sample_rate"], seed=3, omit_last_relu = args["omit_last_relu"], train_phase = t_ph, use_prelu = args["use_prelu"], use_bias = args["use_bias"], cls_fn = args["cls_fn"]).to(device)
+    load_emb = args["load_emb"]
+    load_cls = args["load_cls"]
+    if args["expr_idx"] >= 0 and args["load_num"] >= 0:
+        expr_idx = args["expr_idx"]
+        load_num = args["load_num"]
+        load_cls_fname = f"{expr_idx}-sampcnn_classifier_{load_num}-model.pth"
+        load_emb_fname = f"{expr_idx}-sampcnn_embedder_{load_num}-model.pth"
+        load_emb = os.path.join(args["model_dir"], load_emb_fname)
+        load_cls = os.path.join(args["model_dir"], load_cls_fname)
     if ".pth" in load_emb:
         load_file = load_emb
-        if is_valid_tup(args.load_model_by_tup) == False:
+        if args["expr_idx"] > 0 == False:
             expr_idx = int(load_file.split(os.sep)[-1].split("-")[0])
         t_ph = TrainPhase.base_weightgen
         model.embedder.load_state_dict(torch.load(load_emb))
@@ -361,24 +371,12 @@ if __name__ == "__main__":
     if ".pth" in load_cls:
         model.classifier.load_state_dict(torch.load(load_cls))
 
-    settings_dict = {"expr_idx": expr_idx, "lr": args.learning_rate, "bs": args.batch_size,
-        "epochs": args.epochs, "sr": args.sample_rate,
-        "se_dropout": args.se_dropout,
-        "res1_dropout": args.res1_dropout, "res2_dropout": args.res2_dropout,
-        "rese1_dropout": args.rese1_dropout, "rese2_dropout": args.res2_dropout,
-        "simple_dropout": args.simple_dropout, "use_class_weights": args.use_class_weights,
-        "se_fc_alpha": args.se_fc_alpha, "rese1_fc_alpha": args.rese1_fc_alpha, "rese2_fc_alpha": args.rese2_fc_alpha, 
-        "label_smoothing": args.label_smoothing, "omit_last_relu": args.omit_last_relu, "use_prelu": args.use_prelu, "se_prelu": args.se_prelu, "multilabel": args.multilabel, "cls_fn": args.cls_fn
-        }
-
-    if args.to_res == True:
-        UR.settings_csv_writer(settings_dict, dest_dir = args.res_dir, expr_idx = expr_idx, expr_name="sampcnn_base")
 
     nrun = None 
     # NEPTUNE STUFF
-    if args.to_nep == True:
+    if args["to_nep"] == True:
         nep_api = ""
-        print(f"running neptune: {args.to_nep}")
+        print(f"running neptune: {args['to_nep']}")
         with open(UG.DEF_NEP_API, "r") as f:
             nep_api = f.read().strip()
 
@@ -389,10 +387,10 @@ if __name__ == "__main__":
             capture_hardware_metrics=False,
             )
 
-        nrun["model/params"] = settings_dict
+        nrun["model/params"] = args
 
     #print(model.embedder.state_dict())
-    runner(model, train_phase = t_ph,expr_idx = expr_idx, lr=args.learning_rate, bs=args.batch_size, epochs=args.epochs, save_ivl = args.save_ivl, sr = args.sample_rate, max_samp = max_samp, use_class_weights = args.use_class_weights, num_classes_total = num_classes_total, label_smoothing = args.label_smoothing, num_classes_base=num_classes_base,
-            multilabel=args.multilabel,res_dir=args.res_dir, save_dir=args.save_dir, to_print=args.to_print, to_time=args.to_time, graph_dir = args.graph_dir, data_dir=args.data_dir, to_graph=args.to_graph, to_res=args.to_res, device=device, nep = nrun)
+    runner(model, train_phase = t_ph,expr_idx = expr_idx, lr=args["learning_rate"], bs=args["batch_size"], epochs=args["epochs"], save_ivl = args["save_ivl"], sr = args["sample_rate"], max_samp = max_samp, use_class_weights = args["use_class_weights"], num_classes_total = num_classes_total, label_smoothing = args["label_smoothing"], num_classes_base=num_classes_base,
+            multilabel=args["multilabel"], res_dir=args["res_dir"], save_dir=args["save_dir"], to_print=args["to_print"], to_time=args["to_time"], graph_dir = args["graph_dir"], data_dir=args["data_dir"], to_graph=args["to_graph"], to_res=args["to_res"], device=device, nep = nrun)
     if args.to_nep == True:
         nrun.stop()

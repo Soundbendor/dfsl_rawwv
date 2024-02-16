@@ -25,6 +25,12 @@ def insize_by_blocks2(blk_list):
             sz = calc_insize(sz, ksize = cks, stride = cstr)
     return sz
 
+def samp_to_ms(samp, sr=44100):
+    return (1000. *samp)/float(sr)
+
+def ms_to_samp(sec, sr=44100):
+    return float(sr) * (sec/1000.)
+
 
 def samp_to_sec(samp, sr=44100):
     return samp/float(sr)

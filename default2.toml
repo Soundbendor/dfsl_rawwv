@@ -1,0 +1,23 @@
+learning_rate=0.00025
+cls_fn='cos_sim'
+model = "cnn14"
+sample_rate=16000
+batch_size=5
+epochs=1
+multilabel=true
+use_class_weights=false
+label_smoothing=0.0
+se_dropout=0.5
+save_ivl=0
+load_emb=''
+load_cls=''
+omit_last_relu=true
+use_prelu=false
+use_bias=false
+to_print=true
+to_time=true
+to_graph=true
+to_res=true
+to_nep=false
+train_phase='base_init'
+
