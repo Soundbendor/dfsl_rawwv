@@ -81,22 +81,22 @@ class CNN14Model(nn.Module):
 
     def unfreeze_classifier(self):
         self.classifier.unfreeze_classifier()
-
+    """
     def init_zarr(self, k_novel, k_samp, k_dim, device='cpu'):
         self.zarr = torch.zeros((k_novel, k_samp, k_dim), requires_grad=False).to(device)
         self.zclass = np.zeros(k_novel, dtype=int)
         self.zidx = 0
-
+    """
     def set_train_phase(self, cur_tp):
         if cur_tp == TrainPhase.base_weightgen:
             self.freeze_embedder()
-            self.freeze_classifier()
+            #self.freeze_classifier()
         else:
             self.unfreeze_embedder()
-            self.unfreeze_classifier()
-            self.zarr = None
-            self.zavg = None
-            self.zclass = None
+            #self.unfreeze_classifier()
+            #self.zarr = None
+            #self.zavg = None
+            #self.zclass = None
         self.classifier.set_train_phase(cur_tp)
 
     def set_exclude_idxs(self, exc_idxs):
@@ -107,13 +107,14 @@ class CNN14Model(nn.Module):
 
     def reset_copies(self):
         self.classifier.reset_copies()
-
+    """
     def set_zarr(self, k_novel_samp, k_novel_idx):
         k_novel_ft = self.flatten(self.embedder(k_novel_samp))
         self.zarr[self.zidx] = k_novel_ft
         self.zclass[self.zidx] = k_novel_idx
         self.zidx += 1
-
+    """
+    """
     def calc_pseudonovel_vecs(self):
         self.zavg = torch.mean(self.zarr, dim=1)
         self.zavg.requires_grad_(False)
@@ -121,19 +122,19 @@ class CNN14Model(nn.Module):
         for i in range(self.zavg.shape[0]):
             self.watt[i] = self.classifier.calc_w_att(self.zarr[i])
         self.classifier.calc_pseudonovel_vecs(self.zarr,self.zavg, self.zclass, self.watt)
-
+    """
     def set_pseudonovel_vec(self, k_novel_idx, k_novel_ex):
         # k_novel_ex should be of size (k_novel, input_dim)
         #print(k_novel_ex.type())
         k_novel_ft = self.flatten(self.embedder(k_novel_ex))
         self.classifier.set_pseudonovel_vec(k_novel_idx, k_novel_ft)
-
+    """
     def set_pseudonovel_vecs(self, k_novel_idxs, k_novel_sz, k_novel_exs):
         # k_novel_idxs should be of size k_novel
         # k_novel_ex should be of size (all_sizes, input_dim)
         k_novel_fts = self.flatten(self.embedder(k_novel_exs))
         self.classifier.set_pseudonovel_vecs(k_novel_idxs,k_novel_fts)
-
+    """
     def forward(self, cur_ipt):
         #torch.Size([5, 1, 64, 1108]) out of spectrogram
         #torch.Size([5, 2048, 2, 34]) out of embeddr

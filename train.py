@@ -6,7 +6,7 @@ from torch.utils.data import DataLoader,Subset
 from torch import cuda
 from arch.sampcnn_model import SampCNNModel
 from arch.cnn14_model import CNN14Model
-from ds.esc50 import ESC50 
+from ds.esc50 import ESC50, make_esc50_fewshot_tasks 
 import os
 import argparse
 import time
@@ -21,6 +21,7 @@ import tomllib
 from distutils.util import strtobool
 import neptune
 from ast import literal_eval as make_tuple
+import pandas as pd
 
 #REFERENCES:
 # (1) Kim, T. (2019) sampleaudio [Github Repository]. Github. https://github.com/tae-jun/sampleaudio/
@@ -31,14 +32,6 @@ from ast import literal_eval as make_tuple
 # ESC50: 30 (base)-10 novel(val) - 10 novel(test) class split
 # 24 (training):8(validation):8(testing) sample split
 
-UG.DEF_DATADIR = os.path.join(os.sep, 'media', 'dxk', 'tosh_ext', 'ds', 'ESC-50-master') 
-UG.DEF_SAVEDIR = os.path.join(os.sep, 'media', 'dxk', 'tosh_ext', 'fscil', 'dfsl_rawwv', 'save') 
-#UG.DEF_SAVEDIR = os.path.join(os.path.split(__file__)[0], "save")
-UG.DEF_GRAPHDIR = os.path.join(os.path.split(__file__)[0], "graph")
-UG.DEF_RESDIR = os.path.join(os.path.split(__file__)[0], "res")
-UG.DEF_NEP_API = os.path.join(os.path.split(__file__)[0], "nepapi.txt")
-UG.DEF_SEED = 3
-
 #torch.autograd.set_detect_anomaly(True)
 
 def make_folder(cur_arg, cur_dir):
@@ -46,34 +39,50 @@ def make_folder(cur_arg, cur_dir):
         os.makedirs(cur_dir)
 
 
-def runner(model, expr_idx = 0, train_phase = TrainPhase.base_init, seed=UG.DEF_SEED, sr = 16000, max_samp = 118098, max_rng=10000, lr = 1e-4, bs=4, label_smoothing = 0.0, graph_dir = UG.DEF_GRAPHDIR, save_dir = UG.DEF_SAVEDIR, res_dir = UG.DEF_RESDIR, data_dir = UG.DEF_DATADIR, epochs=1, save_ivl=0, num_classes_total = 50, num_classes_base = 30, use_class_weights = False, to_print=True, to_time = True, to_graph=True, to_res = True, device='cpu', multilabel=True, nep=None):
+def runner(model, expr_idx = 0, train_phase = TrainPhase.base_init, seed=UG.DEF_SEED, sr = 16000, max_samp = 118098, max_rng=10000, lr = 1e-4, bs=4, label_smoothing = 0.0, graph_dir = UG.DEF_GRAPHDIR, save_dir = UG.DEF_SAVEDIR, res_dir = UG.DEF_RESDIR, data_dir = UG.DEF_DATADIR, epochs=1, save_ivl=0, num_classes_valid = 10, num_classes_test = 10, num_classes_base = 30, n_way = 5, k_shot = 4, use_class_weights = False, to_print=True, to_time = True, to_graph=True, to_res = True, device='cpu', multilabel=True, nep=None):
     rng = np.random.default_rng(seed=seed)
     cur_seed = rng.integers(0,max_rng,1)[0]
     torch.manual_seed(seed)
-    #cur_loss = nn.CrossEntropyLoss(label_smoothing=label_smoothing)
-    cur_loss = nn.BCEWithLogitsLoss()
+    cur_loss = None
+    if multilabel == True:
+        cur_loss = nn.BCEWithLogitsLoss()
+    else:
+        cur_loss = nn.CrossEntropyLoss(label_smoothing=label_smoothing)
     cur_optim = torch.optim.Adam(model.parameters(), lr=lr)
+    
+    esc50_csvpath = os.path.join(data_dir,"meta", "esc50.csv")
+    esc50_df = pd.read_csv(esc50_csvpath)
+    
+    num_classes_total = num_classes_base + num_classes_valid + num_classes_test
     class_order = np.arange(0,num_classes_total) # order of classes
     rng.shuffle(class_order) # shuffle classes
-    base_classes = class_order[:30]
-    novelval_classes = class_order[30:40]
-    noveltest_classes = class_order[40:]
+    base_classes = class_order[:num_classes_base]
+    novelval_classes = class_order[num_classes_base: num_classes_base + num_classes_valid]
+    noveltest_classes = class_order[num_classes_base + num_classes_valid: num_classes_total]
     fold_order = np.arange(1,6) # order of folds
     rng.shuffle(fold_order) # shuffle folds to group folds other than sequentially
     training_folds = fold_order[:3]
     valid_folds = fold_order[3:4]
     test_folds = fold_order[4:]
-    base_train_data = ESC50(folds=training_folds, classes=base_classes, k=24, srate=sr, samp_sz=max_samp, basefolder = data_dir, seed = cur_seed, label_offset = 0, to_label_tx = True)
-    base_valid_data = ESC50(folds=valid_folds, classes=base_classes, k=8, srate=sr, samp_sz=max_samp, basefolder = data_dir, seed = cur_seed, label_offset = 0, to_label_tx = True)
-    base_test_data = ESC50(folds=test_folds, classes=base_classes, k=8, srate=sr, samp_sz=max_samp, basefolder = data_dir, seed = cur_seed, label_offset = 0, to_label_tx = True)
+    #print("base_train")
+    base_train_data = ESC50(esc50_df, folds=training_folds, classes=base_classes, k_shot=24, srate=sr, samp_sz=max_samp, basefolder = data_dir, seed = cur_seed, label_offset = 0, to_label_tx = True)
+    #print("base_valid")
+    base_valid_data = ESC50(esc50_df, folds=valid_folds, classes=base_classes, k_shot=8, srate=sr, samp_sz=max_samp, basefolder = data_dir, seed = cur_seed, label_offset = 0, to_label_tx = True)
+    #print("base_test")
+    base_test_data = ESC50(esc50_df, folds=test_folds, classes=base_classes, k_shot=8, srate=sr, samp_sz=max_samp, basefolder = data_dir, seed = cur_seed, label_offset = 0, to_label_tx = True)
+    """
     novelval_train_data = ESC50(folds=training_folds, classes=novelval_classes, k=24, srate=sr, samp_sz=max_samp, basefolder = data_dir, seed = cur_seed, label_offset = 30, to_label_tx = True)
     novelval_valid_data = ESC50(folds=valid_folds, classes=novelval_classes, k=8, srate=sr, samp_sz=max_samp, basefolder = data_dir, seed = cur_seed, label_offset = 30, to_label_tx = True)
     novelval_test_data = ESC50(folds=test_folds, classes=novelval_classes, k=8, srate=sr, samp_sz=max_samp, basefolder = data_dir, seed = cur_seed, label_offset = 30, to_label_tx = True)
     noveltest_train_data = ESC50(folds=training_folds, classes=noveltest_classes, k=24, srate=sr, samp_sz=max_samp, basefolder = data_dir, seed = cur_seed, label_offset = 40, to_label_tx = True)
     noveltest_valid_data = ESC50(folds=valid_folds, classes=noveltest_classes, k=8, srate=sr, samp_sz=max_samp, basefolder = data_dir, seed = cur_seed, label_offset = 40, to_label_tx = True)
     noveltest_test_data = ESC50(folds=test_folds, classes=noveltest_classes, k=8, srate=sr, samp_sz=max_samp, basefolder = data_dir, seed = cur_seed, label_offset = 40, to_label_tx = True)
+    """
+    # essentially can take from all folds
+    # set k to np inf to just take all the possible examples
 
-    base_classes_nomap = np.arange(0,30)
+    novelval_datas = make_esc50_fewshot_tasks(esc50_df, folds=fold_order, classes=novelval_classes, n_way = n_way, k_shot = np.inf, srate=sr, samp_sz=max_samp, basefolder = data_dir, seed= cur_seed, initial_label_offset = 30, to_label_tx = True)
+    novelval_datas = make_esc50_fewshot_tasks(esc50_df, folds=fold_order, classes=novelval_classes, n_way = n_way, k_shot = np.inf, srate=sr, samp_sz=max_samp, basefolder = data_dir, seed= cur_seed, initial_label_offset = 30, to_label_tx = True)
     if use_class_weights == True and train_phase == TrainPhase.base_init:
         cur_loss.weight = torch.tensor(base_train_data.class_prop)
     print("~~~~~")
@@ -85,7 +94,7 @@ def runner(model, expr_idx = 0, train_phase = TrainPhase.base_init, seed=UG.DEF_
         tester(model,cur_loss,base_test_data, expr_idx= expr_idx, bs=bs, num_classes = num_classes_base, res_dir=res_dir, graph_dir = graph_dir, to_print=to_print, to_time=to_time, to_graph=to_graph, to_res=to_res,device=device,pretrain=(train_phase != TrainPhase.base_init), multilabel=multilabel, nep=nep)
 
     if train_phase == TrainPhase.base_weightgen:
-        base_weightgen_trainer(model, cur_loss, cur_optim, base_train_data, base_valid_data, lr=lr, bs = bs, epochs = epochs, save_ivl = save_ivl, save_dir = save_dir, res_dir = res_dir, graph_dir = graph_dir, device = device, expr_idx = expr_idx, multilabel=multilabel,num_classes = num_classes_base, to_print = to_print, to_time = to_time, to_graph = to_graph, to_res = to_res, rng = rng, k_novel = 5, k_samp = 4, base_classes = base_classes, nep=nep)
+        base_weightgen_trainer(model, cur_loss, cur_optim, base_train_data, base_valid_data, lr=lr, bs = bs, epochs = epochs, save_ivl = save_ivl, save_dir = save_dir, res_dir = res_dir, graph_dir = graph_dir, device = device, expr_idx = expr_idx, multilabel=multilabel,num_classes = num_classes_base, to_print = to_print, to_time = to_time, to_graph = to_graph, to_res = to_res, rng = rng, n_way = n_way, k_shot = k_shot, base_classes = base_classes, nep=nep)
  
 
 def loss_printer(epoch_idx, batch_idx, cur_loss, loss_type=BatchType.train, to_print = True):
@@ -190,14 +199,19 @@ def tester(model, cur_loss, test_data, bs = 4, res_dir = UG.DEF_RESDIR, graph_di
         if len(confmat_path) > 0:
             UN.nep_confmat_upload(nep,confmat_path ,batch_type=BatchType.test, train_phase = TrainPhase.base_init)
 
-def base_weightgen_trainer(model, cur_loss, cur_optim, train_data, valid_data, lr=1e-4, bs = 4, epochs = 1, save_ivl = 0, save_dir = UG.DEF_SAVEDIR, res_dir = UG.DEF_RESDIR, graph_dir = UG.DEF_GRAPHDIR, device = 'cpu', expr_idx = 0, num_classes = 30, to_print = True, to_time = True, to_graph = True, to_res = True, rng = None, k_novel = 5, k_samp = 5, max_samp = 24, total_novel_samp = 100, total_base_samp = 100, base_classes = [],multilabel=True, nep = None):
+def novel_tester(model, cur_loss, base_test_data, novel_test_data, bs = 4, epochs = 1, res_dir = UG.DEF_RESDIR, graph_dir = UG.DEF_GRAPHDIR, device = 'cpu', expr_idx = 0, num_classes = 50, to_print = True, to_time = True, to_graph = True, to_res = True, rng = None, k_novel = 5, k_samp = 5, max_samp = 24, total_novel_samp = 100, total_base_samp = 100, base_classes = [], novel_classes = [], multilabel = True, nep = None):
+    pass
+
+    
+
+def base_weightgen_trainer(model, cur_loss, cur_optim, train_data, valid_data, lr=1e-4, bs = 4, epochs = 1, save_ivl = 0, save_dir = UG.DEF_SAVEDIR, res_dir = UG.DEF_RESDIR, graph_dir = UG.DEF_GRAPHDIR, device = 'cpu', expr_idx = 0, num_classes = 30, to_print = True, to_time = True, to_graph = True, to_res = True, rng = None, n_way = 5, k_shot = 5, max_samp = 24, total_novel_samp = 100, total_base_samp = 100, base_classes = [],multilabel=True, nep = None):
     model.set_train_phase(TrainPhase.base_weightgen)
     model.zero_grad()
     cur_optim.zero_grad()
     num_base_classes = len(base_classes)
-    num_rest = num_base_classes - k_novel
+    num_rest = num_base_classes - n_way
     # number of unsampled from novel to take for training against
-    num_novel_unsampled = int((total_novel_samp - (k_novel * k_samp))/k_novel)
+    num_novel_unsampled = int((total_novel_samp - (n_way * k_shot))/n_way)
     # number of unsampled (all of them are) to take for training against (from rest of base classes)
     num_base_unsampled = int(total_base_samp/num_rest)
     res_wgen_batches = []
@@ -208,7 +222,7 @@ def base_weightgen_trainer(model, cur_loss, cur_optim, train_data, valid_data, l
         rng = np.random.default_rng(seed=UG.DEF_SEED)
     for epoch_idx in range(epochs):
         #print("called")
-        cur_novel = rng.choice(base_classes, size=k_novel, replace=False)
+        cur_novel = rng.choice(base_classes, size=n_way, replace=False)
         cur_base = np.setdiff1d(base_classes,cur_novel)
         # first sample from each class the examples to use to generate the classification vectors
         # and then some how sample other examples for t_novel and t_test (see gidaris supp)
@@ -225,10 +239,10 @@ def base_weightgen_trainer(model, cur_loss, cur_optim, train_data, valid_data, l
         #print("for0")
         for novel_cls in cur_novel: # sampling for classification vectors
             cur_k_idxs = train_data.get_class_ex_idxs(novel_cls)
-            wg_k = rng.choice(cur_k_idxs, size=k_samp, replace=False)
+            wg_k = rng.choice(cur_k_idxs, size=k_shot, replace=False)
             unsampled = np.setdiff1d(cur_k_idxs, wg_k)
             cur_subset = Subset(train_data, wg_k)
-            subset_dl = DataLoader(cur_subset, batch_size=k_samp, shuffle=False)
+            subset_dl = DataLoader(cur_subset, batch_size=k_shot, shuffle=False)
             #print(wg_k, unsampled)
             unsampled_samp = rng.choice(unsampled, size=num_novel_unsampled, replace=False)
             test_k = np.append(test_k,unsampled_samp)
@@ -327,14 +341,18 @@ if __name__ == "__main__":
     #res2_list = [(2,3,128,3), (7,3,256,3),(1,2,512,2)]
     #rese2_list = []
     #rese2_list = [(2,3,128,3), (7,3,256,3),(1,2,512,2)]
-    rese2_list = [(2,3,128,3), (7,3,256,3),(1,3,512,3)]
+    #rese2_list_old = [(2,3,128,3), (7,3,256,3),(1,3,512,3)]
+
+    #to make compatible with cnn14
+    rese2_list = [(2,3,128,3), (2,3,256,3),  (2,3,512,3),  (3,3,1024,3), (1,3,2048,3)]
     #se_list = [(2,3,128,3), (7,3,256,3),(1,2,512,2)]
     se_list = []
     res2_list = []
     simple_list = []
     # middle dim according to (1) is same as num channels
     num_classes_base = 30
-    num_classes_total = 50
+    num_classes_valid = 10
+    num_classes_test = 10
     device = 'cpu'
     t_ph = TrainPhase.base_init
     #max_samp = 118098
@@ -390,7 +408,11 @@ if __name__ == "__main__":
         nrun["model/params"] = args
 
     #print(model.embedder.state_dict())
-    runner(model, train_phase = t_ph,expr_idx = expr_idx, lr=args["learning_rate"], bs=args["batch_size"], epochs=args["epochs"], save_ivl = args["save_ivl"], sr = args["sample_rate"], max_samp = max_samp, use_class_weights = args["use_class_weights"], num_classes_total = num_classes_total, label_smoothing = args["label_smoothing"], num_classes_base=num_classes_base,
-            multilabel=args["multilabel"], res_dir=args["res_dir"], save_dir=args["save_dir"], to_print=args["to_print"], to_time=args["to_time"], graph_dir = args["graph_dir"], data_dir=args["data_dir"], to_graph=args["to_graph"], to_res=args["to_res"], device=device, nep = nrun)
+    runner(model, train_phase = t_ph,expr_idx = expr_idx, lr=args["learning_rate"], bs=args["batch_size"], epochs=args["epochs"], save_ivl = args["save_ivl"], sr = args["sample_rate"], max_samp = max_samp, use_class_weights = args["use_class_weights"], label_smoothing = args["label_smoothing"], 
+            multilabel=args["multilabel"], res_dir=args["res_dir"], save_dir=args["save_dir"], to_print=args["to_print"], to_time=args["to_time"], graph_dir = args["graph_dir"], data_dir=args["data_dir"], to_graph=args["to_graph"], to_res=args["to_res"], device=device, nep = nrun,
+            n_way = args["n_way"], k_shot = args["k_shot"], 
+            num_classes_base=num_classes_base, num_classes_valid = num_classes_valid, num_classes_test = num_classes_test
+
+            )
     if args.to_nep == True:
         nrun.stop()

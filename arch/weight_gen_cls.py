@@ -19,8 +19,10 @@ class WeightGenCls(nn.Module):
         self.num_classes = num_classes
         self.dim = dim
         #self.base_classes = base_idxs
-        sdev = torch.sqrt(torch.tensor(2.0/dim)) # from (3)
-        cls_vec = torch.randn(num_classes,dim) * sdev # from(3)
+        self.sdev = torch.sqrt(torch.tensor(2.0/dim)) # from (3)
+        self.sdev.requires_grad_(False)
+
+        cls_vec = torch.randn(num_classes,dim) * self.sdev # from(3)
         #cls_vec = torch.zeros(num_classes,dim)
         #self.cls_vec = Parameter(nn.init.xavier_normal_(cls_vec)) # idea from (3)
         self.cls_vec = Parameter(cls_vec) # idea from (3)
@@ -30,10 +32,10 @@ class WeightGenCls(nn.Module):
         gamma = torch.tensor(10.)
         self.tau = Parameter(tau)
         self.gamma = Parameter(gamma)
-        self.phi_avg = Parameter(torch.randn(dim)*sdev) # idea from (3)ish
-        self.phi_att = Parameter(torch.randn(dim)*sdev) # idea from (3)ish
+        self.phi_avg = Parameter(torch.randn(dim)*self.sdev) # idea from (3)ish
+        self.phi_att = Parameter(torch.randn(dim)*self.sdev) # idea from (3)ish
         self.phi_q = Parameter(nn.init.xavier_normal_(torch.zeros(dim,dim))) #idea from (3)ish
-        k_b = torch.randn(num_classes, dim) * sdev # copying init of cls_vec idea from (3)
+        k_b = torch.randn(num_classes, dim) * self.sdev # copying init of cls_vec idea from (3)
         self.k_b = Parameter(k_b)
         self.include_idxs = []
         self.exclude_idxs = []
@@ -45,7 +47,7 @@ class WeightGenCls(nn.Module):
 
     def set_train_phase(self, cur_tph):
         self.train_phase = cur_tph
-        if cur_tph != TrainPhase.base_weightgen:
+        if cur_tph == TrainPhase.base_init:
             self.k_b.requires_grad_(False)
             self.phi_avg.requires_grad_(False)
             self.phi_att.requires_grad_(False)
@@ -59,7 +61,7 @@ class WeightGenCls(nn.Module):
                 self.k_b_copy = None
             except:
                 pass
-        else:
+        elif self.train_phase == TrainPhase.base_weightgen:
             self.k_b.requires_grad_(True)
             self.phi_avg.requires_grad_(True)
             self.phi_att.requires_grad_(True)
@@ -112,6 +114,17 @@ class WeightGenCls(nn.Module):
             pass
 
 
+    # adds new classification vector slots
+    def add_novel_classes(self, num_to_add):
+        self.cls_vec.requires_grad_(False)
+        old_num_classes = self.num_classes
+        new_num_classes = old_num_classes + num_to_add
+        cls_vec_new = torch.randn(new_num_classes, self.dim) * self.sdev 
+        cls_vec_new.requires_grad_(False)
+        cls_vec_new[old_num_classes,:] = self.cls_vec[old_num_classes,:]
+        self.cls_vec = cls_vec_new
+        self.cls_vec.requires_grad_(True)
+        self.num_classes = new_num_classes
 
     def set_include_idxs(self, idxs):
         self.include_idxs = idxs

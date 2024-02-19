@@ -42,7 +42,9 @@ settings = {
         "use_bias": False,
         "expr_idx": -1,
         "load_num": -1,
-        "train_phase": 'base_init'
+        "train_phase": 'base_init',
+        "n_way": 5,
+        "k_shot": 4
         }
 
 def parse_args():

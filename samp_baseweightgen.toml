@@ -29,3 +29,7 @@ to_res = true
 to_nep = true
 
 train_phase = "base_weightgen"
+
+
+n_way = 5
+k_shot = 4

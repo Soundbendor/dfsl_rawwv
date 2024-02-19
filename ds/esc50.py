@@ -13,16 +13,20 @@ from sklearn import preprocessing as SKP
 
 # 40 examples total
 # 8 examples per fold and 5 folds total
+
+# k is the number of samples per class
+
 class ESC50(Dataset):
-    def __init__(self, folds=[1,2,3,4,5], classes=list(range(50)), k=80, srate=44100, samp_sz=236196, basefolder = os.path.join(os.path.split(__file__)[0], "ESC-50-master"), to_label_tx = True, label_offset = 0, one_hot = True, seed = 3):
+    def __init__(self, cur_df, folds=[1,2,3,4,5], classes=list(range(50)), k_shot=80, srate=44100, samp_sz=236196, basefolder = os.path.join(os.path.split(__file__)[0], "ESC-50-master"), to_label_tx = True, label_offset = 0, one_hot = True, seed = 3):
         self.basepath = basefolder
         self.srate = srate
         self.classes = sorted(classes)
         self.audiopath = os.path.join(self.basepath, 'audio')
-        self.csvpath = os.path.join(self.basepath,"meta", "esc50.csv")
-        self.df = pd.read_csv(self.csvpath)
+        self.df = cur_df
+        self.num_folds = len(folds)
         # 5 folds, max 8 samples per fold
-        self.k = max(1,min(k, 8 * len(folds)))
+        # k = number of examples per class
+        self.k_shot = max(1,min(k_shot, 8 * self.num_folds))
         self.num_classes = len(classes)
         self.to_label_tx = to_label_tx
         if to_label_tx == True:
@@ -33,8 +37,9 @@ class ESC50(Dataset):
         self.num_classes_total = self.df['target'].max() + 1 # zero-indexed
         self.class_counts = np.array([self.df.loc[self.df['target'] == x].shape[0] for x in self.classes])
         self.class_prop = 1./self.class_counts
-        # k = number of instances per class
-        self.dfsub = self.df.set_index(['fold', 'target']).loc[folds,classes,:].groupby('target').sample(self.k, random_state=seed).reset_index()
+        # essentially a way of shuffling
+        self.dfsub = self.df.set_index(['fold', 'target']).loc[folds,classes,:].groupby('target').sample(self.k_shot, random_state=seed, replace=False).reset_index()
+        print(self.dfsub)
         self.samp_sz = samp_sz
         self.shape = self.dfsub.shape
          
@@ -76,4 +81,16 @@ class ESC50(Dataset):
         cur_snd = SL.sndloader(cur_fpath, want_sr=self.srate, max_samp=self.samp_sz, to_mono=True)
         return cur_snd, ret_label
 
-
+def make_esc50_fewshot_tasks(cur_df, folds=[], classes=[], n_way = 5, k_shot=np.inf, srate = 16000, samp_sz = 118098, basefolder = os.path.join(os.path.split(__file__)[0], "ESC-50-master"), seed = 3, initial_label_offset = 30, to_label_tx = True):
+    ret = []
+    num_folds = len(folds)
+    num_classes = len(classes)
+    num_classes_allocated = 0
+    while (num_classes_allocated < num_classes):
+        num_classes_to_add = min(n_way, num_classes - num_classes_allocated)
+        cur_classes = classes[num_classes_allocated: num_classes_allocated + num_classes_to_add]
+        cur_label_offset = initial_label_offset + num_classes_allocated
+        cur_ds = ESC50(cur_df, folds=folds, classes=cur_classes, k_shot=k_shot, srate=srate, samp_sz=samp_sz, basefolder = basefolder, seed= seed, label_offset = cur_label_offset, to_label_tx = to_label_tx)
+        ret.append(cur_ds)
+        num_classes_allocated += num_classes_to_add
+    return ret

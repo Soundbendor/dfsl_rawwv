@@ -30,3 +30,5 @@ to_res=true
 to_nep=false
 train_phase='base_init'
 
+n_way = 5
+k_shot = 4
