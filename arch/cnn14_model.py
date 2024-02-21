@@ -16,7 +16,7 @@ from util.types import BatchType,TrainPhase
 # (2) Kong, Q., Cao, Y., Iqbal, T., Wang, Y., Wang, W., and Plumbley, M. D. (2020). PANNs: Large-Scale Pretrained Audio Neural Networks for Audio Pattern Recognition. IEEE/ACM Transiations on Audio, Speech, and Language Processing, Vol. 2. doi: 10.1109/TASLP.2020.3030497
 
 class CNN14Model(nn.Module):
-    def __init__(self, in_ch=1, num_classes=10, sr=44100, seed=3, omit_last_relu = True, train_phase = TrainPhase.base_init, use_prelu = True, use_bias = False, cls_fn = 'cos_sim'):
+    def __init__(self, in_ch=1, num_classes_base=10, num_classes_novel = 0, sr=44100, seed=3, omit_last_relu = True, train_phase = TrainPhase.base_init, use_prelu = True, use_bias = False, cls_fn = 'cos_sim'):
         """
         EMBEDDER Layers (stored in self.embedder)
         strided_list: tuples of (num, ksize, out_channels, stride)
@@ -33,11 +33,12 @@ class CNN14Model(nn.Module):
         CLASSIFIER Layers (stored in self.classifier):
         use_classifier: to use a classifier or not
         fc_dim: inner dimension of classifier
-        num_classes: number of classes to classify
+        num_classes_base: number of classes to classify
         """
         super().__init__()
         self.in_ch = in_ch
-        self.num_classes = num_classes
+        self.num_classes_base = num_classes_base
+        self.num_classes_novel = num_classes_novel
         self.sr = sr
         n_fft = int( AU.ms_to_samp(64,sr=sr))
         win_length = int( AU.ms_to_samp(25, sr=sr))
@@ -68,7 +69,7 @@ class CNN14Model(nn.Module):
         # output of embedder should be (n, prev_ch, 1)
         # middle dim according to (1) is same as num channels
         
-        self.classifier = WeightGenCls(num_classes = num_classes, dim=ch, seed=seed, train_phase=TrainPhase.base_init, cls_fn=cls_fn)
+        self.classifier = WeightGenCls(num_classes_base = num_classes_base, num_classes_novel = num_classes_novel, dim=ch, seed=seed, train_phase=TrainPhase.base_init, cls_fn=cls_fn)
  
     def freeze_embedder(self):
         self.embedder.requires_grad_(False)
@@ -135,6 +136,11 @@ class CNN14Model(nn.Module):
         k_novel_fts = self.flatten(self.embedder(k_novel_exs))
         self.classifier.set_pseudonovel_vecs(k_novel_idxs,k_novel_fts)
     """
+
+
+    def renum_novel_classes(self, num_novel):
+       self.num_classes_novel = self.classifier.renum_novel_classes(num_novel)
+
     def forward(self, cur_ipt):
         #torch.Size([5, 1, 64, 1108]) out of spectrogram
         #torch.Size([5, 2048, 2, 34]) out of embeddr

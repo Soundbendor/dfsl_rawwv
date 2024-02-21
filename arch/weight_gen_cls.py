@@ -11,19 +11,20 @@ from util.types import BatchType,TrainPhase
 # (2) Gidaris, S. and Komodakis, N. (2018). Dynamic Few-Shot Visual Learning Without Forgetting. In Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR) 2018, (pp. 4367-4375). https://openaccess.thecvf.com/content_cvpr_2018/html/Gidaris_Dynamic_Few-Shot_Visual_CVPR_2018_paper.html.
 # (3) Gidaris, S. (2019). FewShotWithoutForgetting [Github Repository]. Github. https://github.com/gidariss/FewShotWithoutForgetting/ 
 class WeightGenCls(nn.Module):
-    def __init__(self, num_classes = 30, dim=512, seed=3, exclude_idxs = [], train_phase=TrainPhase.base_init, cls_fn = 'cos_sim'):
+    def __init__(self, num_classes_base = 30, num_classes_novel = 0, dim=512, seed=3, exclude_idxs = [], train_phase=TrainPhase.base_init, cls_fn = 'cos_sim'):
         super().__init__()
         torch.manual_seed(seed)
 
         self.train_phase = train_phase
-        self.num_classes = num_classes
+        self.num_classes_base = num_classes_base
+        self.num_classes_novel = num_classes_novel
         self.dim = dim
         #self.base_classes = base_idxs
         self.sdev = torch.sqrt(torch.tensor(2.0/dim)) # from (3)
         self.sdev.requires_grad_(False)
 
-        cls_vec = torch.randn(num_classes,dim) * self.sdev # from(3)
-        #cls_vec = torch.zeros(num_classes,dim)
+        cls_vec = torch.randn(num_classes_base,dim) * self.sdev # from(3)
+        #cls_vec = torch.zeros(num_classes_base,dim)
         #self.cls_vec = Parameter(nn.init.xavier_normal_(cls_vec)) # idea from (3)
         self.cls_vec = Parameter(cls_vec) # idea from (3)
         #from (2)
@@ -35,7 +36,7 @@ class WeightGenCls(nn.Module):
         self.phi_avg = Parameter(torch.randn(dim)*self.sdev) # idea from (3)ish
         self.phi_att = Parameter(torch.randn(dim)*self.sdev) # idea from (3)ish
         self.phi_q = Parameter(nn.init.xavier_normal_(torch.zeros(dim,dim))) #idea from (3)ish
-        k_b = torch.randn(num_classes, dim) * self.sdev # copying init of cls_vec idea from (3)
+        k_b = torch.randn(num_classes_base, dim) * self.sdev # copying init of cls_vec idea from (3)
         self.k_b = Parameter(k_b)
         self.include_idxs = []
         self.exclude_idxs = []
@@ -114,18 +115,23 @@ class WeightGenCls(nn.Module):
             pass
 
 
-    # adds new classification vector slots
-    def add_novel_classes(self, num_to_add):
+    # change number of classification vector slots
+    def renum_novel_classes(self, num_novel_classes):
         self.cls_vec.requires_grad_(False)
-        old_num_classes = self.num_classes
-        new_num_classes = old_num_classes + num_to_add
-        cls_vec_new = torch.randn(new_num_classes, self.dim) * self.sdev 
-        cls_vec_new.requires_grad_(False)
-        cls_vec_new[old_num_classes,:] = self.cls_vec[old_num_classes,:]
-        self.cls_vec = cls_vec_new
-        self.cls_vec.requires_grad_(True)
-        self.num_classes = new_num_classes
-
+        novel_clip_num = max(0, num_novel_classes)
+        resize_num = novel_clip_num +self.num_classes_base
+        old_num = self.num_classes_base + self.num_classes_novel
+        if resize_num != old_num:
+            num_to_copy = min(old_num, resize_num)
+            cls_vec_new = torch.randn(resize_num, self.dim) * self.sdev 
+            cls_vec_new.requires_grad_(False)
+            cls_vec_new[num_to_copy,:] = self.cls_vec[num_to_copy,:]
+            self.cls_vec = cls_vec_new
+            self.cls_vec.requires_grad_(True)
+            self.num_classes_novel = novel_clip_num
+        return novel_clip_num
+        
+        
     def set_include_idxs(self, idxs):
         self.include_idxs = idxs
 
@@ -149,13 +155,13 @@ class WeightGenCls(nn.Module):
         multed = None
         if self.train_phase != TrainPhase.base_weightgen:
             cur_mask = self.calc_mask(self.k_b)
-            att_out = self.gamma * self.cos_sim(self.apply_mask(self.k_b, cur_mask), att1.T) # (num_classes, dim) x (dim,k) = (num_classes, k)
-            multed = torch.matmul(self.attn_smax(att_out).T, self.cls_vec_attval) # (k, num_classes) x (num_classes, dim) = (k, dim)
+            att_out = self.gamma * self.cos_sim(self.apply_mask(self.k_b, cur_mask), att1.T) # (num_classes_base, dim) x (dim,k) = (num_classes_base, k)
+            multed = torch.matmul(self.attn_smax(att_out).T, self.cls_vec_attval) # (k, num_classes_base) x (num_classes_base, dim) = (k, dim)
         else:
-            att_out = self.gamma * self.cos_sim(self.k_b_copy, att1.T) # (num_classes, dim) x (dim,k) = (num_classes, k)
-            multed = torch.matmul(self.attn_smax(att_out).T, self.cls_vec_attval) # (k, num_classes) x (num_classes, dim) = (k, dim)
+            att_out = self.gamma * self.cos_sim(self.k_b_copy, att1.T) # (num_classes_base, dim) x (dim,k) = (num_classes_base, k)
+            multed = torch.matmul(self.attn_smax(att_out).T, self.cls_vec_attval) # (k, num_classes_base) x (num_classes_base, dim) = (k, dim)
         #print(multed.shape)
-        #ret = (multed/self.num_base_classes).mean(dim=0) # div by num_base_classes to simulate taking mean, then take actual mean dim = 0 for mean across k
+        #ret = (multed/self.num_classes_base).mean(dim=0) # div by num_classes_base to simulate taking mean, then take actual mean dim = 0 for mean across k
         ret = torch.mean(multed,dim=0) #take actual mean dim = 0 for mean across k
         return ret
 
@@ -196,8 +202,8 @@ class WeightGenCls(nn.Module):
         # cdist (b,p,m) x (b,r,m) = (b,p,r)
         # (?, bs=p,nc=r)
         # input is (bs, num_channels) = ie (5, 512)
-        # compare to (num_classes, num_channels) which is cls_vec
-        # output should be (bs, num_classes) = ie (5, 30)
+        # compare to (num_classes_base, num_channels) which is cls_vec
+        # output should be (bs, num_classes_base) = ie (5, 30)
         ret = torch.cdist(ipt, cls_vec)
         ret = nn.functional.normalize(ret, dim=1,p=1)
         return (1. - ret)
@@ -239,4 +245,4 @@ class WeightGenCls(nn.Module):
             #ret = self.cos_sim(ipt, self.cls_vec)
         #print(ret)
         return ret
-        # should be (bs, num_channels) x (num_channels, num_classes) = (bs, num_classes)
+        # should be (bs, num_channels) x (num_channels, num_classes_base) = (bs, num_classes_base)

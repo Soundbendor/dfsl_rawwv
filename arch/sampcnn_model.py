@@ -32,7 +32,7 @@ from util.types import BatchType,TrainPhase
 
 
 class SampCNNModel(nn.Module):
-    def __init__(self, in_ch=1, strided_list=[], basic_list=[], res1_list=[], res2_list=[], se_list=[], rese1_list=[], rese2_list=[], simple_list=[], se_dropout=0.2, res1_dropout=0.2, res2_dropout=0.2, rese1_dropout=0.2, rese2_dropout=0.2,simple_dropout=0.5, se_fc_alpha=2.**(-3), rese1_fc_alpha=2.**(-3), rese2_fc_alpha=2.**(-3), num_classes=10, sr=44100, seed=3, omit_last_relu = True, train_phase = TrainPhase.base_init, use_prelu = True, se_prelu = False, cls_fn = 'cos_sim'):
+    def __init__(self, in_ch=1, strided_list=[], basic_list=[], res1_list=[], res2_list=[], se_list=[], rese1_list=[], rese2_list=[], simple_list=[], se_dropout=0.2, res1_dropout=0.2, res2_dropout=0.2, rese1_dropout=0.2, rese2_dropout=0.2,simple_dropout=0.5, se_fc_alpha=2.**(-3), rese1_fc_alpha=2.**(-3), rese2_fc_alpha=2.**(-3), num_classes_base=10, num_classes_novel=0, sr=44100, seed=3, omit_last_relu = True, train_phase = TrainPhase.base_init, use_prelu = True, se_prelu = False, cls_fn = 'cos_sim'):
         """
         EMBEDDER Layers (stored in self.embedder)
         strided_list: tuples of (num, ksize, out_channels, stride)
@@ -49,11 +49,12 @@ class SampCNNModel(nn.Module):
         CLASSIFIER Layers (stored in self.classifier):
         use_classifier: to use a classifier or not
         fc_dim: inner dimension of classifier
-        num_classes: number of classes to classify
+        num_classes_base: number of classes to classify
         """
         super().__init__()
         self.in_ch = in_ch
-        self.num_classes = num_classes
+        self.num_classes_base = num_classes_base
+        self.num_classes_novel = num_classes_novel
         self.sr = sr
 
         cur_blklist = []
@@ -171,7 +172,7 @@ class SampCNNModel(nn.Module):
         # output of embedder should be (n, prev_ch, 1)
         # middle dim according to (1) is same as num channels
         
-        self.classifier = WeightGenCls(num_classes = num_classes, dim=prev_ch, seed=seed, train_phase=TrainPhase.base_init, cls_fn=cls_fn)
+        self.classifier = WeightGenCls(num_classes_base = num_classes_base, num_classes_novel = num_classes_novel, dim=prev_ch, seed=seed, train_phase=TrainPhase.base_init, cls_fn=cls_fn)
         """
         self.classifier = nn.Sequential()
         if use_classifier == True:
@@ -179,7 +180,7 @@ class SampCNNModel(nn.Module):
             self.classifier.append(nn.Flatten(start_dim=-2))
             self.classifier.append(nn.Linear(prev_ch, self.fc_dim))
             self.classifier.append(nn.ReLU())
-            self.classifier.append(nn.Linear(fc_dim, num_classes))
+            self.classifier.append(nn.Linear(fc_dim, num_classes_base))
         """
   
     def freeze_embedder(self):
@@ -242,6 +243,8 @@ class SampCNNModel(nn.Module):
         k_novel_ft = self.flatten(self.embedder(k_novel_ex))
         self.classifier.set_pseudonovel_vec(k_novel_idx, k_novel_ft)
 
+    def renum_novel_classes(self, num_novel):
+       self.num_classes_novel = self.classifier.renum_novel_classes(num_novel)
     """
     def set_pseudonovel_vecs(self, k_novel_idxs, k_novel_sz, k_novel_exs):
         # k_novel_idxs should be of size k_novel

@@ -1,4 +1,4 @@
-from util.types import BatchType,TrainPhase
+from util.types import BatchType,TrainPhase,DatasetType
 import util.metrics as UM
 """
 def nep_batch_parser_old(cur_nep, cur_dict,batch_type=BatchType.train, train_phase = TrainPhase.base_init):
@@ -9,8 +9,8 @@ def nep_batch_parser_old(cur_nep, cur_dict,batch_type=BatchType.train, train_pha
     cur_nep[f"{base_str}/avg_top1acc"].append(cur_dict["epoch_avg_acc1"])
 """
 
-def nep_batch_parser(cur_nep, cur_dict, batch_type=BatchType.train, train_phase = TrainPhase.base_init):
-    base_str = f"{train_phase.name}/{batch_type.name}"
+def nep_batch_parser(cur_nep, cur_dict, batch_type=BatchType.train, train_phase = TrainPhase.base_init, ds_type = DatasetType.base, ds_idx=0):
+    base_str = f"{train_phase.name}/{batch_type.name}/{ds_type.name}-{ds_idx}"
     for k,v in cur_dict.items():
         if k not in UM.ignorekeys:
             cur_nep[f"{base_str}/{k}"].append(v)

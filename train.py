@@ -11,7 +11,7 @@ import os
 import argparse
 import time
 import contextlib
-from util.types import BatchType,TrainPhase
+from util.types import BatchType,TrainPhase,DatasetType
 import util.results as UR 
 import util.metrics as UM
 import util.nep as UN
@@ -39,7 +39,7 @@ def make_folder(cur_arg, cur_dir):
         os.makedirs(cur_dir)
 
 
-def runner(model, expr_idx = 0, train_phase = TrainPhase.base_init, seed=UG.DEF_SEED, sr = 16000, max_samp = 118098, max_rng=10000, lr = 1e-4, bs=4, label_smoothing = 0.0, graph_dir = UG.DEF_GRAPHDIR, save_dir = UG.DEF_SAVEDIR, res_dir = UG.DEF_RESDIR, data_dir = UG.DEF_DATADIR, epochs=1, save_ivl=0, num_classes_valid = 10, num_classes_test = 10, num_classes_base = 30, n_way = 5, k_shot = 4, use_class_weights = False, to_print=True, to_time = True, to_graph=True, to_res = True, device='cpu', multilabel=True, nep=None):
+def runner(model, expr_idx = 0, train_phase = TrainPhase.base_init, seed=UG.DEF_SEED, sr = 16000, max_samp = 118098, max_rng=10000, lr = 1e-4, bs=4, label_smoothing = 0.0, graph_dir = UG.DEF_GRAPHDIR, save_dir = UG.DEF_SAVEDIR, res_dir = UG.DEF_RESDIR, data_dir = UG.DEF_ESC50DIR, epochs=1, save_ivl=0, num_classes_valid = 10, num_classes_test = 10, num_classes_base = 30, n_way = 5, k_shot = 4, use_class_weights = False, to_print=True, to_time = True, to_graph=True, to_res = True, device='cpu', multilabel=True, nep=None):
     rng = np.random.default_rng(seed=seed)
     cur_seed = rng.integers(0,max_rng,1)[0]
     torch.manual_seed(seed)
@@ -82,7 +82,7 @@ def runner(model, expr_idx = 0, train_phase = TrainPhase.base_init, seed=UG.DEF_
     # set k to np inf to just take all the possible examples
 
     novelval_datas = make_esc50_fewshot_tasks(esc50_df, folds=fold_order, classes=novelval_classes, n_way = n_way, k_shot = np.inf, srate=sr, samp_sz=max_samp, basefolder = data_dir, seed= cur_seed, initial_label_offset = 30, to_label_tx = True)
-    novelval_datas = make_esc50_fewshot_tasks(esc50_df, folds=fold_order, classes=novelval_classes, n_way = n_way, k_shot = np.inf, srate=sr, samp_sz=max_samp, basefolder = data_dir, seed= cur_seed, initial_label_offset = 30, to_label_tx = True)
+    noveltest_datas = make_esc50_fewshot_tasks(esc50_df, folds=fold_order, classes=noveltest_classes, n_way = n_way, k_shot = np.inf, srate=sr, samp_sz=max_samp, basefolder = data_dir, seed= cur_seed, initial_label_offset = 30, to_label_tx = True)
     if use_class_weights == True and train_phase == TrainPhase.base_init:
         cur_loss.weight = torch.tensor(base_train_data.class_prop)
     print("~~~~~")
@@ -91,10 +91,10 @@ def runner(model, expr_idx = 0, train_phase = TrainPhase.base_init, seed=UG.DEF_
     print("~~~~~")
     if train_phase == TrainPhase.base_init:
         base_init_trainer(model,cur_loss, cur_optim, base_train_data,base_valid_data, expr_idx= expr_idx, epochs=epochs, lr=lr, bs=bs, save_ivl=save_ivl, num_classes = num_classes_base, save_dir=save_dir, res_dir = res_dir, to_print=to_print, to_time=to_time, to_graph=to_graph, to_res=to_res, graph_dir = graph_dir, multilabel=multilabel, nep=nep,device=device)
-        tester(model,cur_loss,base_test_data, expr_idx= expr_idx, bs=bs, num_classes = num_classes_base, res_dir=res_dir, graph_dir = graph_dir, to_print=to_print, to_time=to_time, to_graph=to_graph, to_res=to_res,device=device,pretrain=(train_phase != TrainPhase.base_init), multilabel=multilabel, nep=nep)
+        base_tester(model,cur_loss,base_test_data, expr_idx= expr_idx, bs=bs, num_classes = num_classes_base, res_dir=res_dir, graph_dir = graph_dir, to_print=to_print, to_time=to_time, to_graph=to_graph, to_res=to_res,device=device,pretrain=(train_phase != TrainPhase.base_init), multilabel=multilabel, nep=nep)
 
     if train_phase == TrainPhase.base_weightgen:
-        base_weightgen_trainer(model, cur_loss, cur_optim, base_train_data, base_valid_data, lr=lr, bs = bs, epochs = epochs, save_ivl = save_ivl, save_dir = save_dir, res_dir = res_dir, graph_dir = graph_dir, device = device, expr_idx = expr_idx, multilabel=multilabel,num_classes = num_classes_base, to_print = to_print, to_time = to_time, to_graph = to_graph, to_res = to_res, rng = rng, n_way = n_way, k_shot = k_shot, base_classes = base_classes, nep=nep)
+        base_weightgen_trainer(model, cur_loss, cur_optim, base_train_data, base_valid_data, lr=lr, bs = bs, epochs = epochs, save_ivl = save_ivl, save_dir = save_dir, res_dir = res_dir, graph_dir = graph_dir, device = device, expr_idx = expr_idx, multilabel=multilabel,num_classes = num_classes_base, to_print = to_print, to_time = to_time, to_graph = to_graph, to_res = to_res, rng = rng, n_way = n_way, k_shot = k_shot, nep=nep)
  
 
 def loss_printer(epoch_idx, batch_idx, cur_loss, loss_type=BatchType.train, to_print = True):
@@ -182,7 +182,7 @@ def model_saver(cur_model, save_dir=UG.DEF_SAVEDIR, epoch_idx=0, expr_idx = 0, m
     torch.save(cdict, outpath)
 
 
-def tester(model, cur_loss, test_data, bs = 4, res_dir = UG.DEF_RESDIR, graph_dir = UG.DEF_GRAPHDIR, device='cpu', expr_idx = 0, num_classes = 30, to_print = True, to_time = True, to_graph = True, to_res = True, pretrain = False,nep=None, multilabel=False):
+def base_tester(model, cur_loss, test_data, bs = 4, res_dir = UG.DEF_RESDIR, graph_dir = UG.DEF_GRAPHDIR, device='cpu', expr_idx = 0, num_classes = 30, to_print = True, to_time = True, to_graph = True, to_res = True, pretrain = False,nep=None, multilabel=False):
     test_dload = DataLoader(test_data, shuffle=True, batch_size = bs)
 
     confmat_path = ""
@@ -199,15 +199,110 @@ def tester(model, cur_loss, test_data, bs = 4, res_dir = UG.DEF_RESDIR, graph_di
         if len(confmat_path) > 0:
             UN.nep_confmat_upload(nep,confmat_path ,batch_type=BatchType.test, train_phase = TrainPhase.base_init)
 
-def novel_tester(model, cur_loss, base_test_data, novel_test_data, bs = 4, epochs = 1, res_dir = UG.DEF_RESDIR, graph_dir = UG.DEF_GRAPHDIR, device = 'cpu', expr_idx = 0, num_classes = 50, to_print = True, to_time = True, to_graph = True, to_res = True, rng = None, k_novel = 5, k_samp = 5, max_samp = 24, total_novel_samp = 100, total_base_samp = 100, base_classes = [], novel_classes = [], multilabel = True, nep = None):
-    pass
+def novel_tester(model, cur_loss, base_test_data, novel_test_datas, bs = 4, epochs = 1, res_dir = UG.DEF_RESDIR, graph_dir = UG.DEF_GRAPHDIR, device = 'cpu', expr_idx = 0, to_print = True, to_time = True, to_graph = True, to_res = True, rng = None, k_novel = 5, k_samp = 5, max_num_test=8, train_phase=TrainPhase.novel_test, batch_type=BatchType.test, multilabel = True, nep = None):
+    # for each class in batch, sample k shot (usually 5) and feed into weight generator
+    # then test on novel and base classes
+
+    num_novel = 0
+
+    base_class_idxs = base_test_data.get_class_idxs()
+    num_base = len(base_class_idxs)
+
+    # base_class_results
+    res_base_arr = []
+    # novel class results, entries will be of increasing length (adding 1 incremental ds each time)
+    res_novel_arr = []
+    for epoch_idx in range(epochs):
+        # do the incremental learning with successive n_way, k_shot novel datasets 
+        model.renum_novel_classes(0)
+        novel_test_unsampled = []
+        for i,novel_tup in enumerate(novel_test_datas):
+            (num_novel_to_add, novel_ds) = novel_tup
+            num_novel += num_novel_to_add
+            model.renum_novel_classes(num_novel)
+            test_b = np.array([], dtype=int)
+            test_k = np.array([],dtype=int)
+
+            #unmapped class indices
+            novel_class_idxs = novel_ds.get_class_idxs()
+            for novel_class_idx in novel_class_idxs:
+                cur_k_idxs = novel_ds.get_class_ex_idxs(novel_class_idx)
+                # examples for weight generator
+                wg_ex = rng.choice(cur_k_idxs, size=k_shot, replace=False)
+                unsampled = np.setdiff1d(cur_k_idxs, wg_ex)
+                # save unsampled to set against later
+                novel_test_unsampled.append(unsampled)
+                cur_subset = Subset(novel_ds, wg_ex)
+                subset_dl = DataLoader(cur_subset, batch_size=k_shot, shuffle=False)
+                #print(wg_k, unsampled)
+                #print("for1")
+                for ci,cl in subset_dl:
+                    #print("cicl")
+                    model.set_pseudonovel_vec(train_data.get_mapped_class_idx(novel_class_idx), ci.to(device))
+            for base_class_idx in base_class_idxs:
+                cur_b_idxs = train_data.get_class_ex_idxs(base_class_idx)
+                num_ex = len(cur_b_idxs)
+                num_to_test = min(num_ex, max_num_test) if max_num_test > 0 else num_ex
+                base_test_idxs = rng.choice(cur_b_idxs, size=num_to_test, replace=False)
+                test_b = np.append(test_b, base_test_idxs)
+
+            if to_print == True:
+                print(f"\nEpoch {epoch_idx}\n ==========================")
+            num_total = num_novel + num_base
+            test_base_sb = Subset(base_test_data, test_b)
+            test_base_dl = DataLoader(test_set, batch_size=bs, shuffle=True)
+
+            # test base
+            res_base = batch_handler(model, test_base_dl, cur_loss, cur_opter=None, batch_type = batch_type, device=device, epoch_idx=epoch_idx, train_phase = train_phase, bs=bs, num_classes = num_total, to_print=to_print, to_time = to_time, multilabel=multilabel)
+            #res_base_arr.append(res_base)
+
+            if nep != None:
+                UN.nep_batch_parser(nep, res_base,batch_type=batch_type, train_phase = train_phase, ds_type=DatasetType.base, ds_idx=0)
+            # test every incremental novel dataset so far
+            # doing this instantiation separately since want variety in examples tested against
+            cur_res_novel_arr = []
+            for i,cur_unsamp in enumerate(novel_test_unsampled):
+                num_unsampled = cur_unsamp.shape[0]
+                num_to_test = min(num_unsampled,max_num_test) if max_num_test > 0 else num_unsampled
+                unsampled_samp = rng.choice(cur_unsamp, size=num_to_test, replace=False)
+                # test against current novel dataset
+                test_novel_sb = Subset(novel_test_datas[i], unsampled_samp)
+                test_novel_dl = DataLoader(test_novel_sb, batch_size=bs, shuffle=True)
+                res_novel = batch_handler(model, test_novel_dl, cur_loss, cur_opter=None, batch_type = batch_type, device=device, epoch_idx=epoch_idx, train_phase = train_phase, bs=bs, num_classes = num_total, to_print=to_print, to_time = to_time, multilabel=multilabel)
+                cur_res_novel_arr.append(res_novel)
+                if nep != None:
+                    UN.nep_batch_parser(nep, res_novel,batch_type=batch_type, train_phase = train_phase, ds_type=DatasetType.novel, ds_idx=i)
+                res_novel_arr.append(cur_res_novel_arr)
+            #print("got to here")
+            if to_res == True:
+                UR.res_csv_appender(res_base, dest_dir=res_dir, expr_idx = expr_idx, epoch_idx=epoch_idx, batch_type=BatchType.test, expr_name="sampcnn_noveltest")
+
+            if nep != None:
+                UN.nep_batch_parser(nep, res_wgen,batch_type=batch_type, train_phase = train_phase, ds_type=DatasetType.base, ds_idx=0)
+            res_valid = batch_handler(model, valid_dload, cur_loss, cur_opter=None, batch_type = batch_type, device=device, epoch_idx=epoch_idx, bs=bs, to_print=to_print, to_time = to_time, num_classes = num_total, multilabel=multilabel)
+
+            if to_res == True:
+                UR.res_csv_appender(res_valid, dest_dir=res_dir, expr_idx = expr_idx, epoch_idx=epoch_idx, batch_type=BatchType.valid, expr_name="sampcnn_wgen", pretrain = False)
+
+
+
+
+        
+
+        
+
+        
+        
+    
 
     
 
-def base_weightgen_trainer(model, cur_loss, cur_optim, train_data, valid_data, lr=1e-4, bs = 4, epochs = 1, save_ivl = 0, save_dir = UG.DEF_SAVEDIR, res_dir = UG.DEF_RESDIR, graph_dir = UG.DEF_GRAPHDIR, device = 'cpu', expr_idx = 0, num_classes = 30, to_print = True, to_time = True, to_graph = True, to_res = True, rng = None, n_way = 5, k_shot = 5, max_samp = 24, total_novel_samp = 100, total_base_samp = 100, base_classes = [],multilabel=True, nep = None):
+def base_weightgen_trainer(model, cur_loss, cur_optim, train_data, valid_data, lr=1e-4, bs = 4, epochs = 1, save_ivl = 0, save_dir = UG.DEF_SAVEDIR, res_dir = UG.DEF_RESDIR, graph_dir = UG.DEF_GRAPHDIR, device = 'cpu', expr_idx = 0, num_classes = 30, to_print = True, to_time = True, to_graph = True, to_res = True, rng = None, n_way = 5, k_shot = 5, total_novel_samp = 100, total_base_samp = 100, multilabel=True, nep = None):
     model.set_train_phase(TrainPhase.base_weightgen)
     model.zero_grad()
     cur_optim.zero_grad()
+    #unmapped base class indices
+    base_classes = train_data.get_class_idxs()
     num_base_classes = len(base_classes)
     num_rest = num_base_classes - n_way
     # number of unsampled from novel to take for training against
@@ -239,11 +334,14 @@ def base_weightgen_trainer(model, cur_loss, cur_optim, train_data, valid_data, l
         #print("for0")
         for novel_cls in cur_novel: # sampling for classification vectors
             cur_k_idxs = train_data.get_class_ex_idxs(novel_cls)
+            # examples for weight generator
             wg_k = rng.choice(cur_k_idxs, size=k_shot, replace=False)
             unsampled = np.setdiff1d(cur_k_idxs, wg_k)
             cur_subset = Subset(train_data, wg_k)
             subset_dl = DataLoader(cur_subset, batch_size=k_shot, shuffle=False)
             #print(wg_k, unsampled)
+
+            # pick from unsampled to test against
             unsampled_samp = rng.choice(unsampled, size=num_novel_unsampled, replace=False)
             test_k = np.append(test_k,unsampled_samp)
             #print("for1")
@@ -270,7 +368,7 @@ def base_weightgen_trainer(model, cur_loss, cur_optim, train_data, valid_data, l
                 model_saver(model, save_dir=save_dir, epoch_idx=epoch_idx, expr_idx=expr_idx, mtype="classifier")
 
         if nep != None:
-            UN.nep_batch_parser(nep, res_wgen,batch_type=BatchType.train, train_phase = TrainPhase.base_weightgen)
+            UN.nep_batch_parser(nep, res_wgen,batch_type=BatchType.train, train_phase = TrainPhase.base_weightgen, ds_type = DatasetType.base, ds_idx=0)
         res_valid = batch_handler(model, valid_dload, cur_loss, cur_opter=None, batch_type = BatchType.valid, device=device, epoch_idx=epoch_idx, bs=bs, to_print=to_print, to_time = to_time, num_classes = num_classes, multilabel=multilabel)
 
         model.reset_copies()
@@ -280,7 +378,7 @@ def base_weightgen_trainer(model, cur_loss, cur_optim, train_data, valid_data, l
         res_valid_batches.append(res_valid)
 
         if nep != None:
-            UN.nep_batch_parser(nep, res_valid,batch_type=BatchType.valid, train_phase = TrainPhase.base_weightgen)
+            UN.nep_batch_parser(nep, res_valid,batch_type=BatchType.valid, train_phase = TrainPhase.base_weightgen, ds_type=DatasetType.base, ds_idx=0)
     if to_graph == True:
         UR.train_valid_grapher(res_wgen_batches, res_valid_batches, dest_dir="graph", graph_key="loss_avg", expr_idx=expr_idx, expr_name="sampcnn_wgen")
         UR.train_valid_grapher(res_valid_batches, res_valid_batches, dest_dir="graph", graph_key="time_avg", expr_idx=expr_idx, expr_name="sampcnn_wgen")
@@ -304,7 +402,7 @@ def base_init_trainer(model, cur_loss, cur_optim, train_data, valid_data, lr=1e-
                 model_saver(model, save_dir=save_dir, epoch_idx=epoch_idx, expr_idx=expr_idx, mtype="classifier")
 
         if nep != None:
-            UN.nep_batch_parser(nep, res_train,batch_type=BatchType.train, train_phase = TrainPhase.base_init)
+            UN.nep_batch_parser(nep, res_train,batch_type=BatchType.train, train_phase = TrainPhase.base_init, ds_type = DatasetType.base, ds_idx=0)
         res_valid = batch_handler(model, valid_dload, cur_loss, cur_opter=None, batch_type = BatchType.valid, device=device, train_phase=TrainPhase.base_init, epoch_idx=epoch_idx, bs=bs, to_print=to_print, to_time = to_time, multilabel=multilabel, num_classes = num_classes)
         if to_res == True:
             UR.res_csv_appender(res_valid, dest_dir=res_dir, expr_idx = expr_idx, epoch_idx=epoch_idx, batch_type=BatchType.valid, expr_name="sampcnn_base", pretrain = False)
@@ -312,13 +410,11 @@ def base_init_trainer(model, cur_loss, cur_optim, train_data, valid_data, lr=1e-
         res_valid_batches.append(res_valid)
 
         if nep != None:
-            UN.nep_batch_parser(nep, res_valid,batch_type=BatchType.valid, train_phase = TrainPhase.base_init)
+            UN.nep_batch_parser(nep, res_valid,batch_type=BatchType.valid, train_phase = TrainPhase.base_init, ds_type=DatasetType.base, ds_idx=0)
     if to_graph == True:
         UR.train_valid_grapher(res_train_batches, res_valid_batches, dest_dir="graph", graph_key="loss_avg", expr_idx=expr_idx, expr_name="sampcnn_base")
         UR.train_valid_grapher(res_train_batches, res_valid_batches, dest_dir="graph", graph_key="time_avg", expr_idx=expr_idx, expr_name="sampcnn_base")
 
-def is_valid_tup(cur_tup):
-    return "(" in cur_tup and ")" in cur_tup and "," in cur_tup
 
 if __name__ == "__main__":
     expr_idx = int(time.time() * 1000)
@@ -366,7 +462,7 @@ if __name__ == "__main__":
     model = None
 
     if args["model"] == "samplecnn":
-        model = SampCNNModel(in_ch=1, strided_list=strided_list, basic_list=[], res1_list=res1_list, res2_list=res2_list, se_list=se_list, rese1_list=[], rese2_list=rese2_list, simple_list=simple_list, se_dropout=args["se_dropout"], res1_dropout=args["res1_dropout"], res2_dropout=args["res2_dropout"], rese1_dropout=args["rese1_dropout"], rese2_dropout=args["rese2_dropout"],simple_dropout=args["simple_dropout"], se_fc_alpha=args["se_fc_alpha"], rese1_fc_alpha=args["rese1_fc_alpha"], rese2_fc_alpha=args["rese2_fc_alpha"], num_classes=num_classes_base, sr=args["sample_rate"], omit_last_relu = args["omit_last_relu"], use_prelu = args["use_prelu"], se_prelu=args["se_prelu"], cls_fn = args["cls_fn"]).to(device)
+        model = SampCNNModel(in_ch=1, strided_list=strided_list, basic_list=[], res1_list=res1_list, res2_list=res2_list, se_list=se_list, rese1_list=[], rese2_list=rese2_list, simple_list=simple_list, se_dropout=args["se_dropout"], res1_dropout=args["res1_dropout"], res2_dropout=args["res2_dropout"], rese1_dropout=args["rese1_dropout"], rese2_dropout=args["rese2_dropout"],simple_dropout=args["simple_dropout"], se_fc_alpha=args["se_fc_alpha"], rese1_fc_alpha=args["rese1_fc_alpha"], rese2_fc_alpha=args["rese2_fc_alpha"], num_classes_base=num_classes_base, num_classes_novel = 0, sr=args["sample_rate"], omit_last_relu = args["omit_last_relu"], use_prelu = args["use_prelu"], se_prelu=args["se_prelu"], cls_fn = args["cls_fn"]).to(device)
     else:
         
         model = CNN14Model(in_ch=1, num_classes=num_classes_base, sr=args["sample_rate"], seed=3, omit_last_relu = args["omit_last_relu"], train_phase = t_ph, use_prelu = args["use_prelu"], use_bias = args["use_bias"], cls_fn = args["cls_fn"]).to(device)
