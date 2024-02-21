@@ -3,13 +3,13 @@ from matplotlib import pyplot as plt
 from matplotlib import ticker as tkr
 import numpy as np
 import os
-from util.types import BatchType,TrainPhase
+from util.types import BatchType,TrainPhase,ModelName,DatasetName
 import re
 import util.metrics as UM
 import neptune
 
-def settings_csv_writer(settings_dict, dest_dir="res", expr_idx = 0, epoch_idx=0, expr_name="sampcnn_dfsl"):
-    fname = f"{expr_idx}-{expr_name}-settings.csv"
+def settings_csv_writer(settings_dict, dest_dir="res", expr_idx = 0, epoch_idx=0, modelname=ModelName.samplecnn, baseset=DatasetName.esc50, novelset=DatasetName.esc50, expr_name="sampcnn_dfsl"):
+    fname = f"{expr_idx}-{modelname.name}-{baseset.name}-{novelset.name}_settings.csv"
     fpath = os.path.join(dest_dir, fname)
     header = ["expr_idx", "sr", "lr", "bs", "epochs", "label_smoothing", "se_dropout", "res1_dropout", "res2_dropout", "rese1_dropout", "rese2_dropout", "simple_dropout", "se_fc_alpha", "rese1_fc_alpha", "rese2_fc_alpha", "use_class_weights", "omit_last_relu", "use_prelu", "se_prelu", "multilabel", 'cls_fn'] 
     with open(fpath, "w", newline='', encoding='utf-8') as f:
@@ -17,12 +17,12 @@ def settings_csv_writer(settings_dict, dest_dir="res", expr_idx = 0, epoch_idx=0
         dw.writeheader()
         dw.writerow(settings_dict)
         
-def res_csv_appender(resdict, dest_dir="res", expr_idx = 0, epoch_idx=0, batch_type=BatchType.train, expr_name="sampcnn_dfsl", pretrain=False):
-    fname = f"{expr_idx}-{expr_name}-res.csv"
+def res_csv_appender(resdict, dest_dir="res", expr_idx = 0, epoch_idx=0, batch_type=BatchType.train, modelname=ModelName.samplecnn, baseset=DatasetName.esc50, novelset=DatasetName.esc50,train_phase=TrainPhase.base_init, pretrain=False):
+    fname = f"{expr_idx}-{modelname.name}-{baseset.name}-{novelset.name}_{train_phase.name}-res.csv"
     if pretrain == True:
-        fname = f"{expr_idx}-{expr_name}-res_pretrain.csv"
+        fname = f"{expr_idx}-{modelname.name}-{baseset.name}-{novelset.name}_res-{train_phase.name}-pretrain.csv"
     fpath = os.path.join(dest_dir, fname)
-    header = ["epoch_idx","batch_type","loss_avg","time_avg"]
+    header = ["epoch_idx","dataset", "ds_idx", "batch_type","loss_avg","time_avg"]
     if resdict["multilabel"] == False:
         header += UM.csvable_mc
     else:
@@ -38,12 +38,12 @@ def res_csv_appender(resdict, dest_dir="res", expr_idx = 0, epoch_idx=0, batch_t
 def title_from_key(cur_str):
     return " ".join([x.capitalize() for x in cur_str.split("_")])
 
-def train_valid_grapher(train_arr, valid_arr, dest_dir="graph", graph_key="loss_avg", expr_idx=0, expr_name="sampcnn_dfsl"):
+def train_valid_grapher(train_arr, valid_arr, dest_dir="graph", graph_key="loss_avg", expr_idx=0,modelname=ModelName.samplecnn, baseset=DatasetName.esc50, novelset=DatasetName.esc50):
     gtype = graph_key.split("_")[-1]
-    fname = f"{expr_idx}-{expr_name}-{gtype}.png"
+    fname = f"{expr_idx}-{modelname.name}-{basesest.name}-{novelset.name}_{gtype}.png"
     fpath = os.path.join(dest_dir, fname)
     key_title = title_from_key(graph_key)
-    ctitle = f"Training and Validation {key_title} for {expr_name}"
+    ctitle = f"Training and Validation {key_title}\n for {modelname.name}:{baseset.name}-{novelset.name}"
     xlabel = "Epoch"
     ylabel = key_title
     plt.suptitle(ctitle)
@@ -58,12 +58,12 @@ def train_valid_grapher(train_arr, valid_arr, dest_dir="graph", graph_key="loss_
     plt.savefig(fpath)
     plt.clf()
 
-def plot_confmat(confmat,dest_dir="graph", t_ph = TrainPhase.base_init, expr_idx=0, expr_name="sampcnn_dfsl", multilabel=False):
+def plot_confmat(confmat,dest_dir="graph", train_phase = TrainPhase.base_init, expr_idx=0, modelname=ModelName.samplecnn, baseset=DatasetName.esc50, novelset=DatasetName.esc50,   multilabel=False):
 
-    t_ph_name = t_ph.name
+    t_ph_name = train_phase.name
     t_ph_title = title_from_key(t_ph_name)
-    fname = f"{expr_idx}-{expr_name}-{t_ph_name}-confmat.png"
-    ctitle = f"{t_ph_title} Confusion Matrix for {expr_name}"
+    fname = f"{expr_idx}-{modelset.name}-{baseset.name}-{novelset.name}_{train_phase.name}-confmat.png"
+    ctitle = f"{t_ph_title} Confusion Matrix\nfor {modelset.name}:{baseset.name}-{novelset.name}"
     fpath = os.path.join(dest_dir, fname)
     if multilabel == False:
         fig=plt.figure()

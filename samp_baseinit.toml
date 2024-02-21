@@ -33,3 +33,6 @@ train_phase = "base_init"
 
 n_way = 5
 k_shot = 4
+
+baseset="esc50"
+novelset="esc50"
