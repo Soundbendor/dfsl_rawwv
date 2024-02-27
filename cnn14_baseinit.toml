@@ -1,6 +1,6 @@
 batch_size = 4
 cls_fn = "cos_sim"
-model = "samplecnn"
+model = "cnn14"
 epochs = 20
 save_ivl = 20
 label_smoothing = 0

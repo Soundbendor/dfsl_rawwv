@@ -44,7 +44,9 @@ settings = {
         "load_num": -1,
         "train_phase": 'base_init',
         "n_way": 5,
-        "k_shot": 4
+        "k_shot": 4,
+        "baseset":"esc50",
+        "novelset": "esc50",
         }
 
 def parse_args():
@@ -54,9 +56,9 @@ def parse_args():
     args = parser.parse_args()
     try:
         with open(args.toml, "rb") as f:
-            print(f"reading {args.toml}")
             cur_settings = tomllib.load(f)
             settings.update(cur_settings)
+            print(f"read {args.toml}")
     except:
         pass
     return settings

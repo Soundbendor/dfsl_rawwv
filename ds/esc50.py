@@ -1,6 +1,6 @@
 import numpy as np
 import torch
-import os
+import os,sys
 import pandas as pd
 from . import sndload as SL
 from torch.utils.data import Dataset
@@ -86,7 +86,7 @@ class ESC50(Dataset):
         return cur_snd, ret_label
 
 
-def make_esc50_fewshot_tasks(cur_df, folds=[], classes=[], n_way = 5, k_shot=np.inf, srate = 16000, samp_sz = 118098, basefolder = UG.DEF_ESC50DIR,, seed = 3, initial_label_offset = 30, to_label_tx = True):
+def make_esc50_fewshot_tasks(cur_df, folds=[], classes=[], n_way = 5, k_shot=np.inf, srate = 16000, samp_sz = 118098, basefolder = UG.DEF_ESC50DIR, seed = 3, one_hot = True, initial_label_offset = 30, to_label_tx = True):
     """
     returns array of (num_classes_added, ds) tups
     """
@@ -98,7 +98,7 @@ def make_esc50_fewshot_tasks(cur_df, folds=[], classes=[], n_way = 5, k_shot=np.
         num_classes_to_add = min(n_way, num_classes - num_classes_allocated)
         cur_classes = classes[num_classes_allocated: num_classes_allocated + num_classes_to_add]
         cur_label_offset = initial_label_offset + num_classes_allocated
-        cur_ds = ESC50(cur_df, folds=folds, classes=cur_classes, k_shot=k_shot, srate=srate, samp_sz=samp_sz, basefolder = basefolder, seed= seed, label_offset = cur_label_offset, to_label_tx = to_label_tx)
+        cur_ds = ESC50(cur_df, folds=folds, classes=cur_classes, k_shot=k_shot, srate=srate, samp_sz=samp_sz, basefolder = basefolder, seed= seed, one_hot = one_hot, label_offset = cur_label_offset, to_label_tx = to_label_tx)
         curtup = (num_classes_to_add, cur_ds)
         ret.append(curtup)
         num_classes_allocated += num_classes_to_add

@@ -40,7 +40,7 @@ def title_from_key(cur_str):
 
 def train_valid_grapher(train_arr, valid_arr, dest_dir="graph", graph_key="loss_avg", expr_idx=0,modelname=ModelName.samplecnn, baseset=DatasetName.esc50, novelset=DatasetName.esc50):
     gtype = graph_key.split("_")[-1]
-    fname = f"{expr_idx}-{modelname.name}-{basesest.name}-{novelset.name}_{gtype}.png"
+    fname = f"{expr_idx}-{modelname.name}-{baseset.name}-{novelset.name}_{gtype}.png"
     fpath = os.path.join(dest_dir, fname)
     key_title = title_from_key(graph_key)
     ctitle = f"Training and Validation {key_title}\n for {modelname.name}:{baseset.name}-{novelset.name}"
@@ -62,8 +62,8 @@ def plot_confmat(confmat,dest_dir="graph", train_phase = TrainPhase.base_init, e
 
     t_ph_name = train_phase.name
     t_ph_title = title_from_key(t_ph_name)
-    fname = f"{expr_idx}-{modelset.name}-{baseset.name}-{novelset.name}_{train_phase.name}-confmat.png"
-    ctitle = f"{t_ph_title} Confusion Matrix\nfor {modelset.name}:{baseset.name}-{novelset.name}"
+    fname = f"{expr_idx}-{modelname.name}-{baseset.name}-{novelset.name}_{train_phase.name}-confmat.png"
+    ctitle = f"{t_ph_title} Confusion Matrix\nfor {modelname.name}:{baseset.name}-{novelset.name}"
     fpath = os.path.join(dest_dir, fname)
     if multilabel == False:
         fig=plt.figure()

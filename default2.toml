@@ -2,9 +2,9 @@ learning_rate=0.00025
 cls_fn='cos_sim'
 model = "cnn14"
 sample_rate=16000
-batch_size=5
+batch_size=4
 epochs=1
-multilabel=true
+multilabel=false
 use_class_weights=false
 label_smoothing=0.0
 se_dropout=0.5
@@ -27,3 +27,5 @@ k_shot = 4
 
 baseset="esc50"
 novelset="esc50"
+
+data_dir ='/media/dxk/TOSHIBA EXT/ds/ESC-50-master'

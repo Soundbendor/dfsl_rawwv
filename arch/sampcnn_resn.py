@@ -22,6 +22,10 @@ class SampCNNResN(nn.Module):
             self.layers_exp = nn.Sequential()
             self.layers_exp.append(nn.Conv1d(conv_in, conv_out, 1, stride=1, padding='same',dilation=1))
             self.layers_exp.append(nn.BatchNorm1d(conv_out,eps=1e-5,momentum=0.1))
+            if use_prelu == True:
+                self.layers_exp.append(nn.PReLU())
+            else:
+                self.layers_exp.append(nn.ReLU())
 
         
         # from this point on, conv_in == conv_out (since layers_exp fixes it)

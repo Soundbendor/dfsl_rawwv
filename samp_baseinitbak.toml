@@ -1,34 +1,38 @@
-batch_size = 4
+batch_size = 5
 cls_fn = "cos_sim"
 model = "samplecnn"
-epochs = 20
-save_ivl = 20
+epochs = 30
+save_ivl = 30
 label_smoothing = 0
 learning_rate = 0.00025
-multilabel = false
+multilabel = true
 omit_last_relu = true
 sample_rate = 16000
 use_class_weights = false
+
 res1_dropout = 0.5
 res2_dropout = 0.5
 rese1_dropout = 0.5
-rese1_fc_alpha = 0.25
-rese2_fc_alpha = 0.25
-rese2_dropout = 0.25
+rese1_fc_alpha = 20
+rese2_dropout = 0.5
 se_dropout = 0.5
-se_fc_alpha = 0.25
+se_fc_alpha = 20
 simple_dropout = 0.5
+
 use_prelu = true
 se_prelu = false
+
 to_print = true
 to_time = true
 to_graph = true
 to_res = true
 to_nep = true
-train_phase = "base_trainall"
-baseset="esc50"
-novelset="esc50"
+
+train_phase = "base_init"
+
+
 n_way = 5
 k_shot = 4
-data_dir ='/media/dxk/TOSHIBA EXT/ds/ESC-50-master'
 
+baseset="esc50"
+novelset="esc50"
