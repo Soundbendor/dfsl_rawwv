@@ -2,6 +2,7 @@ import torch
 import torchaudio.transforms as TATX
 import numpy as np
 from torch import nn
+import contextlib
 from collections import OrderedDict
 from . import arch_util as AU
 from .cnn14_block import CNN14Block
@@ -67,6 +68,7 @@ class CNN14Model(nn.Module):
         #self.in_sec = AU.samp_to_sec(self.in_samples,sr=sr)
         #self.flatten = torch.nn.Flatten(start_dim=-2)
         
+        self.flatten = torch.nn.Flatten(start_dim=-2)
         # output of embedder should be (n, prev_ch, 1)
         # middle dim according to (1) is same as num channels
         
@@ -76,7 +78,7 @@ class CNN14Model(nn.Module):
         self.embedder.requires_grad_(to_freeze==False)
 
     def freeze_classifier(self,to_freeze):
-        self.classifier.freeze_classifier(to_reeze)
+        self.classifier.freeze_classifier(to_freeze)
 
     """
     def init_zarr(self, k_novel, k_samp, k_dim, device='cpu'):
@@ -128,8 +130,15 @@ class CNN14Model(nn.Module):
         # k_novel_ex should be of size (k_novel, input_dim)
         #print(k_novel_ex.type())
         with (torch.no_grad() if self.train_phase != TrainPhase.base_weightgen else contextlib.nullcontext()):
-            k_novel_ft = self.flatten(self.embedder(k_novel_ex))
-            self.classifier.set_pseudonovel_vec(k_novel_idx, k_novel_ft)
+            txed = self.melspect(k_novel_ex)
+            emb_out = self.embedder(txed)
+            cmean_w = torch.mean(emb_out, dim=3)
+            cmax_h = torch.max(cmean_w, dim=2)[0] # returns tuple of values and indices
+            cmean_h = torch.mean(cmean_w, dim=2)
+            cm_out = cmax_h + cmean_h 
+
+            #k_novel_ft = self.flatten(cm_out)
+            self.classifier.set_pseudonovel_vec(k_novel_idx, cm_out)
     """
     def set_pseudonovel_vecs(self, k_novel_idxs, k_novel_sz, k_novel_exs):
         # k_novel_idxs should be of size k_novel
