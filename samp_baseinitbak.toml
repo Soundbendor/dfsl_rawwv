@@ -1,7 +1,9 @@
 batch_size = 5
 cls_fn = "cos_sim"
 model = "samplecnn"
-epochs = 30
+base_epochs=30
+weightgen_epochs=50
+novel_epochs=50
 save_ivl = 30
 label_smoothing = 0
 learning_rate = 0.00025

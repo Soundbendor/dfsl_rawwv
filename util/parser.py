@@ -10,7 +10,9 @@ settings = {
         "cls_fn": 'cos_sim',
         "sample_rate": 16000,
         "batch_size": 5,
-        "epochs": 1,
+        "base_epochs": 1,
+        "weightgen_epochs": 10,
+        "novel_epochs": 10,
         "multilabel": True,
         "use_class_weights": False,
         "label_smoothing": 0.0,
@@ -40,8 +42,11 @@ settings = {
         "to_res": True,
         "to_nep": True,
         "use_bias": False,
-        "expr_idx": -1,
-        "load_num": -1,
+        "expr_num": -1,
+        "emb_load_num": -1,
+        "cls_load_num": -1,
+        "emb_idx": 0,
+        "cls_idx": 0,
         "train_phase": 'base_init',
         "n_way": 5,
         "k_shot": 4,
@@ -60,5 +65,6 @@ def parse_args():
             settings.update(cur_settings)
             print(f"read {args.toml}")
     except:
-        pass
+        print(f"error reading {args.toml}")
+        quit()
     return settings

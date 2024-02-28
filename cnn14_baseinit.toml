@@ -1,7 +1,9 @@
 batch_size = 4
 cls_fn = "cos_sim"
 model = "cnn14"
-epochs = 20
+base_epochs=25
+weightgen_epochs=50
+novel_epochs=50
 save_ivl = 20
 label_smoothing = 0
 learning_rate = 0.00025

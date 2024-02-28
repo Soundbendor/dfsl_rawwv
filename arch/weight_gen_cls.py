@@ -48,27 +48,7 @@ class WeightGenCls(nn.Module):
 
     def set_train_phase(self, cur_tph):
         self.train_phase = cur_tph
-        if cur_tph == TrainPhase.base_init:
-            self.k_b.requires_grad_(False)
-            self.phi_avg.requires_grad_(False)
-            self.phi_att.requires_grad_(False)
-            self.phi_q.requires_grad_(False)
-            try:
-                del self.cls_vec_copy
-                del self.k_b_copy
-                del self.cls_vec_attval
-                self.cls_vec_copy = None
-                self.cls_vec_attval = None
-                self.k_b_copy = None
-            except:
-                pass
-        elif self.train_phase == TrainPhase.base_weightgen:
-            self.k_b.requires_grad_(True)
-            self.phi_avg.requires_grad_(True)
-            self.phi_att.requires_grad_(True)
-            self.phi_q.requires_grad_(True)
-
-
+        
     def clear_exclude_idxs(self):
         self.exclude_idxs.clear()
 
@@ -80,7 +60,7 @@ class WeightGenCls(nn.Module):
         self.include_idxs += idxs
         #sorted(self.include_idxs)
 
-    def set_exclude_idxs(self, exclude_idxs):
+    def set_exclude_idxs(self, exclude_idxs, device='cpu'):
         self.exclude_idxs = exclude_idxs
         try:
             del self.cls_vec_copy
@@ -88,46 +68,65 @@ class WeightGenCls(nn.Module):
             del self.k_b_copy
         except:
             pass
-        self.cls_vec_copy = self.cls_vec.clone().detach()
+        self.cls_vec_copy = Parameter(self.cls_vec.clone().detach()).to(device)
         self.cls_vec_copy.requires_grad_(False)
         self.cls_vec_copy[exclude_idxs] = 0.
         self.cls_vec_attval = self.cls_vec_copy.clone().detach()
         self.cls_vec_attval.requires_grad_(False)
+        #self.cls_vec_copy.requires_grad_(True)
 
-        self.k_b_copy = self.k_b.clone().detach()
-        self.k_b_copy[exclude_idxs] = 0.
-        self.k_b_copy.requires_grad_(True)
-        self.k_b.requires_grad_(False)
+        #self.k_b_copy = self.k_b.clone().detach()
+        #self.k_b_copy[exclude_idxs] = 0.
+        #self.k_b_copy.requires_grad_(True)
+        #self.k_b.requires_grad_(False)
 
-    def reset_copies(self):
+    def reset_copies(self, copy_back = True, device='cpu'):
+        if copy_back == True:
+            if self.cls_vec_copy != None:
+                self.cls_vec_copy = Parameter(self.cls_vec_copy.detach()).to(device)
+                self.cls_vec = Parameter(self.cls_vec.detach()).to(device)
+                self.cls_vec.requires_grad_(False)
+                cur_sz = self.cls_vec.shape[0]
+                idxs_to_set = np.setdiff1d(np.arange(0,cur_sz,1), self.exclude_idxs)
+                self.cls_vec[idxs_to_set,:] = self.cls_vec_copy[idxs_to_set,:]
+                self.cls_vec.requires_grad_(True)
+        self.exclude_idxs = []
         try:
             del self.cls_vec_copy
             del self.cls_vec_attval
+            #del self.k_b_copy
+
+            self.cls_vec_copy = None
+            self.cls_vec_attval = None
+            #self.k_b_copy = None
+
         except:
             pass
-        self.k_b_copy.requires_grad_(False)
-        self.k_b_copy[self.exclude_idxs] = self.k_b[self.exclude_idxs]
-        self.k_b = nn.Parameter(self.k_b_copy.clone().detach())
-        self.k_b.requires_grad_(True)
-        try:
-            del self.k_b_copy
-        except:
-            pass
+        #self.k_b_copy.requires_grad_(False)
+        #self.k_b_copy[self.exclude_idxs] = self.k_b[self.exclude_idxs]
+        #self.k_b = nn.Parameter(self.k_b_copy.clone().detach())
+        #self.k_b.requires_grad_(True)
 
 
     # change number of classification vector slots
-    def renum_novel_classes(self, num_novel_classes):
-        self.cls_vec.requires_grad_(False)
+    def renum_novel_classes(self, num_novel_classes,device='cpu'):
+        grad_was_true = self.cls_vec.requires_grad
+        if grad_was_true == True:
+            self.cls_vec.requires_grad_(False)
         novel_clip_num = max(0, num_novel_classes)
+        #print("novel_clip_num", novel_clip_num)
         resize_num = novel_clip_num +self.num_classes_base
         old_num = self.num_classes_base + self.num_classes_novel
+        #print(self.num_classes_base, self.num_classes_novel, old_num, resize_num)
         if resize_num != old_num:
             num_to_copy = min(old_num, resize_num)
-            cls_vec_new = torch.randn(resize_num, self.dim) * self.sdev 
+            #print("num_to_copy", num_to_copy)
+            cls_vec_new = torch.randn(resize_num, self.dim).to(device) * self.sdev 
             cls_vec_new.requires_grad_(False)
-            cls_vec_new[num_to_copy,:] = self.cls_vec[num_to_copy,:]
-            self.cls_vec = cls_vec_new
-            self.cls_vec.requires_grad_(True)
+            cls_vec_new[:num_to_copy,:] = self.cls_vec[:num_to_copy,:]
+            self.cls_vec = Parameter(cls_vec_new, requires_grad=grad_was_true)
+            if grad_was_true == True:
+                self.cls_vec.requires_grad_(True)
             self.num_classes_novel = novel_clip_num
         return novel_clip_num
         
@@ -153,13 +152,13 @@ class WeightGenCls(nn.Module):
         #print(self.k_b.shape, att1.shape, self.phi_q.shape, z_arr.shape)
         #print(att_out.shape)
         multed = None
-        if self.train_phase != TrainPhase.base_weightgen:
-            cur_mask = self.calc_mask(self.k_b)
-            att_out = self.gamma * self.cos_sim(self.apply_mask(self.k_b, cur_mask), att1.T) # (num_classes_base, dim) x (dim,k) = (num_classes_base, k)
+        if self.train_phase == TrainPhase.base_weightgen:
+            #cur_mask = self.calc_mask(self.k_b_copy)
+            att_out = self.gamma * self.cos_sim(self.k_b, att1.T) # (num_classes_base, dim) x (dim,k) = (num_classes_base, k)
             multed = torch.matmul(self.attn_smax(att_out).T, self.cls_vec_attval) # (k, num_classes_base) x (num_classes_base, dim) = (k, dim)
         else:
-            att_out = self.gamma * self.cos_sim(self.k_b_copy, att1.T) # (num_classes_base, dim) x (dim,k) = (num_classes_base, k)
-            multed = torch.matmul(self.attn_smax(att_out).T, self.cls_vec_attval) # (k, num_classes_base) x (num_classes_base, dim) = (k, dim)
+            att_out = self.gamma * self.cos_sim(self.k_b, att1.T) # (num_classes_base, dim) x (dim,k) = (num_classes_base, k)
+            multed = torch.matmul(self.attn_smax(att_out).T, self.cls_vec[:self.num_classes_base]) # (k, num_classes_base) x (num_classes_base, dim) = (k, dim)
         #print(multed.shape)
         #ret = (multed/self.num_classes_base).mean(dim=0) # div by num_classes_base to simulate taking mean, then take actual mean dim = 0 for mean across k
         ret = torch.mean(multed,dim=0) #take actual mean dim = 0 for mean across k
@@ -167,9 +166,9 @@ class WeightGenCls(nn.Module):
 
     def calc_w_n_plus_1(self, z_arr):
         # z_arr should be (k, dim)
-        z_arr.requires_grad_(False)
+        #z_arr.requires_grad_(False)
         z_avg = torch.mean(z_arr,dim=0) # should be (dim)
-        z_avg.requires_grad_(False)
+        #z_avg.requires_grad_(False)
         w_att = self.calc_w_att(z_arr) # should be (dim)
         w_n_plus_1 = torch.mul(self.phi_avg, z_avg) + torch.mul(self.phi_att, w_att)
         return w_n_plus_1
@@ -178,21 +177,43 @@ class WeightGenCls(nn.Module):
         # k_novel_ft should be of size (k_novel, dim)
         #k_novel_ft.requires_grad_(False)
         cur_wn = self.calc_w_n_plus_1(k_novel_ft)
-        self.cls_vec_copy[k_novel_idx] = cur_wn
-    
-    def freeze_classifier(self):
-        self.cls_vec.requires_grad_(False)
-        self.tau.requires_grad_(False)
+        if self.train_phase == TrainPhase.base_weightgen:
+            self.cls_vec_copy[k_novel_idx] = cur_wn
+        else:
 
-    def unfreeze_classifier(self):
-        self.cls_vec.requires_grad_(True)
-        self.tau.requires_grad_(True)
- 
+            self.cls_vec[k_novel_idx] = cur_wn
+            #print(self.cls_vec[k_novel_idx])
+   
+    def print_cls_vec_norms(self):
+        cur_shape = self.cls_vec.shape
+        norms = []
+        for i in range(cur_shape[0]):
+            cur_tup = (i, torch.linalg.vector_norm(self.cls_vec[i,:]).item())
+            norms.append(cur_tup)
+        print(norms)
+
+    def freeze_classifier(self, to_freeze):
+        needs_grad = to_freeze == False
+        #print(needs_grad)
+        self.cls_vec.requires_grad_(needs_grad)
+        self.tau.requires_grad_(needs_grad)
+
     def calc_w_n_plus_1_2(self, zarr, zavg, watt):
         # z_arr should be (k, dim)
         w_n_plus_1 = torch.mul(self.phi_avg, zavg) + torch.mul(self.phi_att, watt)
         return w_n_plus_1
-    
+   
+
+    def weightgen_train_enable(self, to_enable): 
+        self.k_b.requires_grad_(to_enable)
+        self.phi_avg.requires_grad_(to_enable)
+        self.phi_att.requires_grad_(to_enable)
+        self.phi_q.requires_grad_(to_enable)
+        try:
+            self.cls_vec_copy.requires_grad_(to_enable)
+        except:
+            pass
+
 
     def calc_pseudonovel_vecs(self, zarrs, zavgs, zclasses, watt):
         for i in range(zarrs.shape[0]):

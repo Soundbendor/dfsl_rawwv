@@ -40,6 +40,7 @@ class CNN14Model(nn.Module):
         self.num_classes_base = num_classes_base
         self.num_classes_novel = num_classes_novel
         self.sr = sr
+        self.train_phase = train_phase
         n_fft = int( AU.ms_to_samp(64,sr=sr))
         win_length = int( AU.ms_to_samp(25, sr=sr))
         hop_size = int( AU.ms_to_samp(10, sr=sr))
@@ -69,19 +70,14 @@ class CNN14Model(nn.Module):
         # output of embedder should be (n, prev_ch, 1)
         # middle dim according to (1) is same as num channels
         
-        self.classifier = WeightGenCls(num_classes_base = num_classes_base, num_classes_novel = num_classes_novel, dim=ch, seed=seed, train_phase=TrainPhase.base_init, cls_fn=cls_fn)
+        self.classifier = WeightGenCls(num_classes_base = num_classes_base, num_classes_novel = num_classes_novel, dim=ch, seed=seed, train_phase=train_phase, cls_fn=cls_fn)
  
-    def freeze_embedder(self):
-        self.embedder.requires_grad_(False)
+    def freeze_embedder(self,to_freeze):
+        self.embedder.requires_grad_(to_freeze==False)
 
-    def unfreeze_embedder(self):
-        self.embedder.requires_grad_(True)
+    def freeze_classifier(self,to_freeze):
+        self.classifier.freeze_classifier(to_reeze)
 
-    def freeze_classifier(self):
-        self.classifier.freeze_classifier()
-
-    def unfreeze_classifier(self):
-        self.classifier.unfreeze_classifier()
     """
     def init_zarr(self, k_novel, k_samp, k_dim, device='cpu'):
         self.zarr = torch.zeros((k_novel, k_samp, k_dim), requires_grad=False).to(device)
@@ -89,25 +85,29 @@ class CNN14Model(nn.Module):
         self.zidx = 0
     """
     def set_train_phase(self, cur_tp):
-        if cur_tp == TrainPhase.base_weightgen:
-            self.freeze_embedder()
+        self.train_phase = cur_tp
+        if cur_tp in [TrainPhase.base_weightgen, TrainPhase.novel_valid, TrainPhase.novel_test, TrainPhase.base_test]:
+            self.freeze_embedder(True)
             #self.freeze_classifier()
         else:
-            self.unfreeze_embedder()
+            self.freeze_embedder(False)
             #self.unfreeze_classifier()
             #self.zarr = None
             #self.zavg = None
             #self.zclass = None
         self.classifier.set_train_phase(cur_tp)
 
-    def set_exclude_idxs(self, exc_idxs):
-        self.classifier.set_exclude_idxs(exc_idxs)
+    def set_exclude_idxs(self, exc_idxs, device='cpu'):
+        self.classifier.set_exclude_idxs(exc_idxs, device=device)
 
     def clear_exclude_idxs(self):
         self.classifier.clear_exclude_idxs()
 
-    def reset_copies(self):
-        self.classifier.reset_copies()
+    def reset_copies(self, copy_back=True, device='cpu'):
+        self.classifier.reset_copies(copy_back = copy_back, device=device)
+
+    def weightgen_train_enable(self, to_enable):
+        self.classifier.weightgen_train_enable(to_enable)
     """
     def set_zarr(self, k_novel_samp, k_novel_idx):
         k_novel_ft = self.flatten(self.embedder(k_novel_samp))
@@ -127,8 +127,9 @@ class CNN14Model(nn.Module):
     def set_pseudonovel_vec(self, k_novel_idx, k_novel_ex):
         # k_novel_ex should be of size (k_novel, input_dim)
         #print(k_novel_ex.type())
-        k_novel_ft = self.flatten(self.embedder(k_novel_ex))
-        self.classifier.set_pseudonovel_vec(k_novel_idx, k_novel_ft)
+        with (torch.no_grad() if self.train_phase != TrainPhase.base_weightgen else contextlib.nullcontext()):
+            k_novel_ft = self.flatten(self.embedder(k_novel_ex))
+            self.classifier.set_pseudonovel_vec(k_novel_idx, k_novel_ft)
     """
     def set_pseudonovel_vecs(self, k_novel_idxs, k_novel_sz, k_novel_exs):
         # k_novel_idxs should be of size k_novel
@@ -138,8 +139,8 @@ class CNN14Model(nn.Module):
     """
 
 
-    def renum_novel_classes(self, num_novel):
-       self.num_classes_novel = self.classifier.renum_novel_classes(num_novel)
+    def renum_novel_classes(self, num_novel, device='cpu'):
+       self.num_classes_novel = self.classifier.renum_novel_classes(num_novel,device=device)
 
     def forward(self, cur_ipt):
         #torch.Size([5, 1, 64, 1108]) out of spectrogram
