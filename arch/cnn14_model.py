@@ -17,7 +17,7 @@ from util.types import BatchType,TrainPhase
 # (2) Kong, Q., Cao, Y., Iqbal, T., Wang, Y., Wang, W., and Plumbley, M. D. (2020). PANNs: Large-Scale Pretrained Audio Neural Networks for Audio Pattern Recognition. IEEE/ACM Transiations on Audio, Speech, and Language Processing, Vol. 2. doi: 10.1109/TASLP.2020.3030497
 
 class CNN14Model(nn.Module):
-    def __init__(self, in_ch=1, num_classes_base=10, num_classes_novel = 0, sr=44100, seed=3, omit_last_relu = True, train_phase = TrainPhase.base_init, use_prelu = True, use_bias = False, cls_fn = 'cos_sim'):
+    def __init__(self, in_ch=1, num_classes_base=10, num_classes_novel = 0, sr=44100, seed=3, omit_last_relu = True, dropout = 0.2, train_phase = TrainPhase.base_init, use_prelu = True, use_bias = False, cls_fn = 'cos_sim'):
         """
         EMBEDDER Layers (stored in self.embedder)
         strided_list: tuples of (num, ksize, out_channels, stride)
@@ -57,7 +57,7 @@ class CNN14Model(nn.Module):
         prev_ch = 1
         for i,(ch,p_ks) in enumerate(ch_pool_tup):
             omit_relu = (i == len(ch_pool_tup) - 1) and omit_last_relu == True
-            cur_blk = CNN14Block(conv_in = prev_ch, conv_out = ch, conv_ks = 3, conv_stride = 1, conv_pad = 1, dropout=0.2, ap_ks = p_ks, omit_last_relu = omit_relu, use_prelu = use_prelu, use_bias = use_bias)
+            cur_blk = CNN14Block(conv_in = prev_ch, conv_out = ch, conv_ks = 3, conv_stride = 1, conv_pad = 1, dropout=dropout, ap_ks = p_ks, omit_last_relu = omit_relu, use_prelu = use_prelu, use_bias = use_bias)
             blkstr = f"conv{i+1}"
             ctup = (blkstr, cur_blk)
             cur_blks.append(ctup)

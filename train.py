@@ -7,6 +7,7 @@ from torch import cuda
 from arch.sampcnn_model import SampCNNModel
 from arch.cnn14_model import CNN14Model
 from ds.esc50 import ESC50, make_esc50_fewshot_tasks 
+from ds.tinysol import TinySOL, make_tinysol_fewshot_tasks
 import os
 import argparse
 import time
@@ -39,7 +40,7 @@ def make_folder(cur_arg, cur_dir):
         os.makedirs(cur_dir)
 
 
-def runner(model, expr_num = 0, train_phase = TrainPhase.base_init, seed=UG.DEF_SEED, sr = 16000, max_samp = 118098, max_rng=10000, lr = 1e-4, bs=4, label_smoothing = 0.0, graph_dir = UG.DEF_GRAPHDIR, save_dir = UG.DEF_SAVEDIR, res_dir = UG.DEF_RESDIR, data_dir = UG.DEF_ESC50DIR, base_epochs=1, weightgen_epochs = 10, novel_epochs = 10, save_ivl=0, num_classes_valid = 10, num_classes_test = 10, num_classes_base = 30, n_way = 5, k_shot = 4, use_class_weights = False, to_print=True, to_time = True, to_graph=True, to_res = True, modelname = ModelName.samplecnn, baseset = DatasetName.esc50, novelset = DatasetName.esc50, device='cpu', multilabel=True, nep=None):
+def runner(model, expr_num = 0, train_phase = TrainPhase.base_init, seed=UG.DEF_SEED, sr = 16000, max_samp = 118098, max_rng=10000, lr = 1e-4, bs=4, label_smoothing = 0.0, graph_dir = UG.DEF_GRAPHDIR, save_dir = UG.DEF_SAVEDIR, res_dir = UG.DEF_RESDIR, data_dir = UG.DEF_ESC50DIR, base_epochs=1, weightgen_epochs = 10, novel_epochs = 10, save_ivl=0, n_way = 5, k_shot = 4, use_class_weights = False, to_print=True, to_time = True, to_graph=True, to_res = True, modelname = ModelName.samplecnn, baseset = DatasetName.esc50, novelset = DatasetName.esc50, device='cpu', multilabel=True, nep=None):
     rng = np.random.default_rng(seed=seed)
     cur_seed = rng.integers(0,max_rng,1)[0]
     torch.manual_seed(seed)
@@ -51,22 +52,27 @@ def runner(model, expr_num = 0, train_phase = TrainPhase.base_init, seed=UG.DEF_
         cur_loss = nn.CrossEntropyLoss(label_smoothing=label_smoothing)
     cur_optim = torch.optim.Adam(model.parameters(), lr=lr)
     
-    esc50_csvpath = os.path.join(data_dir,"meta", "esc50.csv")
-    esc50_df = pd.read_csv(esc50_csvpath)
-    
-    num_classes_total = num_classes_base + num_classes_valid + num_classes_test
-    class_order = np.arange(0,num_classes_total) # order of classes
-    rng.shuffle(class_order) # shuffle classes
-    base_classes = class_order[:num_classes_base]
-    novelval_classes = class_order[num_classes_base: num_classes_base + num_classes_valid]
-    noveltest_classes = class_order[num_classes_base + num_classes_valid: num_classes_total]
-    fold_order = np.arange(1,6) # order of folds
-    rng.shuffle(fold_order) # shuffle folds to group folds other than sequentially
-    training_folds = fold_order[:3]
-    valid_folds = fold_order[3:4]
-    test_folds = fold_order[4:]
-    #print("base_train")
+    esc50path = os.path.join(data_dir, "ESC-50-master")
+    esc50_df = pd.read_csv(os.path.join(esc50path, "meta", "esc50.csv"))
+    tinysolpath = os.path.join(data_dir, "TinySOL")
+    tinysol_df = pd.read_csv(os.path.join(tinysolpath, "TinySOL_metadata.csv"))
 
+   
+    esc50_num_classes_base = 30
+    esc50_num_classes_valid = 10
+    esc50_num_classes_test = 10
+    esc50_num_classes_total = esc50_num_classes_base + esc50_num_classes_valid + esc50_num_classes_test
+    esc50_class_order = np.arange(0,esc50_num_classes_total) # order of classes
+    rng.shuffle(esc50_class_order) # shuffle classes
+    esc50_base_classes = esc50_class_order[:esc50_num_classes_base]
+    esc50_novelval_classes = esc50_class_order[esc50_num_classes_base: esc50_num_classes_base + esc50_num_classes_valid]
+    esc50_noveltest_classes = esc50_class_order[esc50_num_classes_base + esc50_num_classes_valid: esc50_num_classes_total]
+    esc50_fold_order = np.arange(1,6) # order of folds
+    rng.shuffle(esc50_fold_order) # shuffle folds to group folds other than sequentially
+    esc50_training_folds = esc50_fold_order[:3]
+    esc50_valid_folds = esc50_fold_order[3:4]
+    esc50_test_folds = esc50_fold_order[4:]
+    #print("base_train")
 
     # ~~~~~ DATALOADING ~~~~~
     base_train_data = None
@@ -74,18 +80,40 @@ def runner(model, expr_num = 0, train_phase = TrainPhase.base_init, seed=UG.DEF_
     base_test_data = None
     novel_val_datas = None
     novel_test_datas = None
-    
+    num_classes_base = None
+    num_classes_valid = None
+    num_classes_test = None
     if baseset == DatasetName.esc50:
-        base_train_data = ESC50(esc50_df, folds=training_folds, classes=base_classes, k_shot=24, srate=sr, samp_sz=max_samp, basefolder = data_dir, seed = cur_seed, label_offset = 0, one_hot = use_one_hot, to_label_tx = True)
+        num_classes_base = 30
+        base_train_data = ESC50(esc50_df, folds=esc50_training_folds, classes=esc50_base_classes, k_shot=24, srate=sr, samp_sz=max_samp, basefolder = esc50path, seed = cur_seed, label_offset = 0, one_hot = use_one_hot, to_label_tx = True)
         #print("base_valid")
-        base_valid_data = ESC50(esc50_df, folds=valid_folds, classes=base_classes, k_shot=8, srate=sr, samp_sz=max_samp, basefolder = data_dir, seed = cur_seed, label_offset = 0, one_hot = use_one_hot, to_label_tx = True)
+        base_valid_data = ESC50(esc50_df, folds=esc50_valid_folds, classes=esc50_base_classes, k_shot=8, srate=sr, samp_sz=max_samp, basefolder = esc50path, seed = cur_seed, label_offset = 0, one_hot = use_one_hot, to_label_tx = True)
         #print("base_test")
-        base_test_data = ESC50(esc50_df, folds=test_folds, classes=base_classes, k_shot=8, srate=sr, samp_sz=max_samp, basefolder = data_dir, seed = cur_seed, label_offset = 0, one_hot = use_one_hot, to_label_tx = True)
+        base_test_data = ESC50(esc50_df, folds=esc50_test_folds, classes=esc50_base_classes, k_shot=8, srate=sr, samp_sz=max_samp, basefolder = esc50path, seed = cur_seed, label_offset = 0, one_hot = use_one_hot, to_label_tx = True)
+
+
+
     # essentially can take from all folds
     # set k to np inf to just take all the possible examples
     if novelset == DatasetName.esc50:
-        novel_val_datas = make_esc50_fewshot_tasks(esc50_df, folds=fold_order, classes=novelval_classes, n_way = n_way, k_shot = np.inf, srate=sr, samp_sz=max_samp, basefolder = data_dir, seed= cur_seed, initial_label_offset = num_classes_base, one_hot = use_one_hot, to_label_tx = True)
-        novel_test_datas = make_esc50_fewshot_tasks(esc50_df, folds=fold_order, classes=noveltest_classes, n_way = n_way, k_shot = np.inf, srate=sr, samp_sz=max_samp, basefolder = data_dir, seed= cur_seed, initial_label_offset = num_classes_base, one_hot = use_one_hot, to_label_tx = True)
+        num_classes_valid = 10
+        num_classes_test = 10
+        novel_val_datas = make_esc50_fewshot_tasks(esc50_df, folds=esc50_fold_order, classes=esc50_novelval_classes, n_way = n_way, k_shot = np.inf, srate=sr, samp_sz=max_samp, basefolder = esc50path, seed= cur_seed, initial_label_offset = esc50_num_classes_base, one_hot = use_one_hot, to_label_tx = True)
+        novel_test_datas = make_esc50_fewshot_tasks(esc50_df, folds=esc50_fold_order, classes=esc50_noveltest_classes, n_way = n_way, k_shot = np.inf, srate=sr, samp_sz=max_samp, basefolder = esc50path, seed= cur_seed, initial_label_offset = esc50_num_classes_base, one_hot = use_one_hot, to_label_tx = True)
+    elif novelset == DatasetName.tinysol:
+
+        num_classes_valid = 14
+        num_classes_test = 14
+        cur_classes = list(range(14))
+        cur_n_way = 5
+        cur_valid_folds = [0,1]
+        cur_test_folds = [2,3]
+        cur_valid_k_shot = 19 * len(cur_valid_folds) # 19 is the minimal number of samples for an instrument
+        cur_test_k_shot = 19 * len(cur_test_folds) # 19 is the minimal number of samples for an instrument
+        # let's just stick with 5 seconds as a nice middle ground
+        novel_val_datas = make_tinysol_fewshot_tasks(tinysol_df, folds=cur_valid_folds,classes=cur_classes, n_way = cur_n_way, k_shot=cur_valid_k_shot, srate = sr, samp_sz = max_samp,  basefolder = tinysolpath, seed = cur_seed, initial_label_offset = num_classes_base, to_label_tx = True)
+        novel_test_datas = make_tinysol_fewshot_tasks(tinysol_df, folds=cur_test_folds,classes=cur_classes, n_way = cur_n_way, k_shot=cur_test_k_shot, srate = sr, samp_sz = max_samp,  basefolder = tinysolpath, seed = cur_seed, initial_label_offset = num_classes_base, to_label_tx = True)
+
     if use_class_weights == True and train_phase == TrainPhase.base_init:
         cur_loss.weight = torch.tensor(base_train_data.class_prop)
     print("~~~~~")
@@ -159,7 +187,7 @@ def batch_handler(model, dloader_arr, cur_losser, cur_opter=None, batch_type = B
                 cur_loss.backward()
                 cur_opter.step()
                 cur_opter.zero_grad()
-
+            #del cur_loss
     #print(f"After no_grad {model.classifier.cls_vec.requires_grad}")
     time_avg = -1
     time_batch_overall = -1
@@ -218,6 +246,8 @@ def novel_tester(model, cur_loss, base_test_data, novel_test_datas, bs = 4, epoc
     # for each class in batch, sample k shot (usually 5) and feed into weight generator
     # then test on novel and base classes
     
+    model.eval()
+    model.zero_grad()
     model.set_train_phase(train_phase)
 
     model.freeze_classifier(True)
@@ -518,7 +548,7 @@ if __name__ == "__main__":
     else:
         
         mtype = ModelName.cnn14
-        model = CNN14Model(in_ch=1, num_classes_base=num_classes_base, num_classes_novel=0, sr=args["sample_rate"], seed=3, omit_last_relu = args["omit_last_relu"], train_phase = t_ph, use_prelu = args["use_prelu"], use_bias = args["use_bias"], cls_fn = args["cls_fn"]).to(device)
+        model = CNN14Model(in_ch=1, num_classes_base=num_classes_base, num_classes_novel=0, sr=args["sample_rate"], dropout = args["dropout"], seed=3, omit_last_relu = args["omit_last_relu"], train_phase = t_ph, use_prelu = args["use_prelu"], use_bias = args["use_bias"], cls_fn = args["cls_fn"]).to(device)
 
     #save_str=f"{expr_num}-{modelname.name}-{dsname.name}_{mtype}_{epoch_idx}-model.pth"
     modelname = args["model"]
@@ -574,9 +604,7 @@ if __name__ == "__main__":
             multilabel=args["multilabel"], res_dir=args["res_dir"], save_dir=args["save_dir"],
             to_print=args["to_print"], to_time=args["to_time"], graph_dir = args["graph_dir"], data_dir=args["data_dir"], to_graph=args["to_graph"], to_res=args["to_res"],
             device=device, nep = nrun, baseset = bstype, novelset = nstype,
-            n_way = args["n_way"], k_shot = args["k_shot"], modelname = mtype, 
-            num_classes_base=num_classes_base, num_classes_valid = num_classes_valid, num_classes_test = num_classes_test
-
+            n_way = args["n_way"], k_shot = args["k_shot"], modelname = mtype
             )
     if args["to_nep"] == True:
         nrun.stop()

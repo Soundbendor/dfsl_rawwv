@@ -30,4 +30,4 @@ k_shot = 4
 baseset="esc50"
 novelset="esc50"
 
-data_dir ='/media/dxk/TOSHIBA EXT/ds/ESC-50-master'
+data_dir ='/home/dxk/ds/'

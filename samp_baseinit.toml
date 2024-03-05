@@ -32,5 +32,5 @@ baseset="esc50"
 novelset="esc50"
 n_way = 5
 k_shot = 4
-data_dir ='/media/dxk/TOSHIBA EXT/ds/ESC-50-master'
+data_dir = "/home/dxk/ds/"
 
