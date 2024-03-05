@@ -68,7 +68,7 @@ def plot_confmat(confmat,dest_dir="graph", train_phase = TrainPhase.base_init, e
     if multilabel == False:
         fig=plt.figure()
         ax=fig.add_subplot(1,1,1)
-        cur=ax.imshow(confmat,cmap='turbo')
+        cur=ax.imshow(confmat,cmap='BuPu')
         row=confmat.shape[0]
         majorstep = 10
         minorstep=1
@@ -76,15 +76,16 @@ def plot_confmat(confmat,dest_dir="graph", train_phase = TrainPhase.base_init, e
         minortix=np.arange(-0.5,row,minorstep)
         ax.tick_params(labelbottom=False,which="major",bottom=False,top=False,labeltop=True,left=False, labelleft=True, labelright=False,right=False)
         ax.tick_params(labelbottom=False,which="minor",bottom=False,top=True,labeltop=False,left=True, labelleft=False, labelright=False,right=False)
-        plt.colorbar(cur)
+        #plt.colorbar(cur)
         ax.set_xticks(majortix)
         ax.set_xticks(minortix, minor=True)
         ax.set_yticks(majortix)
         ax.set_yticks(minortix, minor=True)
-        ax.grid(visible=True,which="minor", color="white", linestyle="-", alpha=0.5,linewidth=1)
+        #ax.grid(visible=True,which="minor", color="white", linestyle="-", alpha=0.5,linewidth=1)
     else:
         fig,ax = confmat.plot()
     plt.suptitle(ctitle)
+    plt.tight_layout()
     plt.savefig(fpath)
     plt.clf()
     return fpath
