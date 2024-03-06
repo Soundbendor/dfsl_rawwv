@@ -21,7 +21,7 @@ class CNN14Block(nn.Module):
         self.num_groups = 2
         last_nc = conv_in
         for i in range(self.num_groups):
-            omit_relu = i == (self.num_groups) and omit_last_relu == True
+            omit_relu = i == (self.num_groups -1) and omit_last_relu == True
             self.layers.append(nn.Conv2d(last_nc, conv_out, (conv_ks,conv_ks), (conv_stride, conv_stride), (conv_pad, conv_pad), bias=use_bias))
             self.layers.append(nn.BatchNorm2d(conv_out))
             if omit_relu == False:
@@ -34,7 +34,7 @@ class CNN14Block(nn.Module):
         self.layers.append(nn.AvgPool2d((ap_ks,ap_ks)))
         if dropout > 0:
             self.layers.append(nn.Dropout(p=dropout))
-
+        #print(self.layers)
     def forward(self, cur_ipt):
         net_out = self.layers(cur_ipt)
         return net_out

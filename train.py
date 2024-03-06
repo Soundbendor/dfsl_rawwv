@@ -101,7 +101,6 @@ def runner(model, expr_num = 0, train_phase = TrainPhase.base_init, seed=UG.DEF_
         novel_val_datas = make_esc50_fewshot_tasks(esc50_df, folds=esc50_fold_order, classes=esc50_novelval_classes, n_way = n_way, k_shot = np.inf, srate=sr, samp_sz=max_samp, basefolder = esc50path, seed= cur_seed, initial_label_offset = esc50_num_classes_base, one_hot = use_one_hot, to_label_tx = True)
         novel_test_datas = make_esc50_fewshot_tasks(esc50_df, folds=esc50_fold_order, classes=esc50_noveltest_classes, n_way = n_way, k_shot = np.inf, srate=sr, samp_sz=max_samp, basefolder = esc50path, seed= cur_seed, initial_label_offset = esc50_num_classes_base, one_hot = use_one_hot, to_label_tx = True)
     elif novelset == DatasetName.tinysol:
-
         num_classes_valid = 14
         num_classes_test = 14
         cur_classes = list(range(14))
@@ -111,8 +110,8 @@ def runner(model, expr_num = 0, train_phase = TrainPhase.base_init, seed=UG.DEF_
         cur_valid_k_shot = 19 * len(cur_valid_folds) # 19 is the minimal number of samples for an instrument
         cur_test_k_shot = 19 * len(cur_test_folds) # 19 is the minimal number of samples for an instrument
         # let's just stick with 5 seconds as a nice middle ground
-        novel_val_datas = make_tinysol_fewshot_tasks(tinysol_df, folds=cur_valid_folds,classes=cur_classes, n_way = cur_n_way, k_shot=cur_valid_k_shot, srate = sr, samp_sz = max_samp,  basefolder = tinysolpath, seed = cur_seed, initial_label_offset = num_classes_base, to_label_tx = True)
-        novel_test_datas = make_tinysol_fewshot_tasks(tinysol_df, folds=cur_test_folds,classes=cur_classes, n_way = cur_n_way, k_shot=cur_test_k_shot, srate = sr, samp_sz = max_samp,  basefolder = tinysolpath, seed = cur_seed, initial_label_offset = num_classes_base, to_label_tx = True)
+        novel_val_datas = make_tinysol_fewshot_tasks(tinysol_df, folds=cur_valid_folds,classes=cur_classes, n_way = cur_n_way, k_shot=cur_valid_k_shot, srate = sr, samp_sz = max_samp,  basefolder = tinysolpath, seed = cur_seed, initial_label_offset = num_classes_base, one_hot = use_one_hot, to_label_tx = True)
+        novel_test_datas = make_tinysol_fewshot_tasks(tinysol_df, folds=cur_test_folds,classes=cur_classes, n_way = cur_n_way, k_shot=cur_test_k_shot, srate = sr, samp_sz = max_samp,  basefolder = tinysolpath, seed = cur_seed, initial_label_offset = num_classes_base, one_hot = use_one_hot, to_label_tx = True)
 
     if use_class_weights == True and train_phase == TrainPhase.base_init:
         cur_loss.weight = torch.tensor(base_train_data.class_prop)
@@ -285,6 +284,7 @@ def novel_tester(model, cur_loss, base_test_data, novel_test_datas, bs = 4, epoc
             #print("novel_classes_wg", i, novel_class_idxs)
             for novel_class_idx in novel_class_idxs:
                 cur_k_idxs = novel_ds.get_class_ex_idxs(novel_class_idx)
+                #print("cur_k_idxs", cur_k_idxs)
                 # examples for weight generator
                 wg_ex = rng.choice(cur_k_idxs, size=k_shot, replace=False)
                 unsampled = np.setdiff1d(cur_k_idxs, wg_ex)
@@ -297,8 +297,12 @@ def novel_tester(model, cur_loss, base_test_data, novel_test_datas, bs = 4, epoc
                 #print("for1")
                 for ci,cl in subset_dl:
                     #print("cicl")
+                    #print(f"before setting {cl}", model.classifier.cls_vec.shape)
+                    #print(model.classifier.cls_vec)
                     #print("mapped_novel_idx", novel_ds.get_mapped_class_idx(novel_class_idx))
                     model.set_pseudonovel_vec(novel_ds.get_mapped_class_idx(novel_class_idx), ci.to(device))
+                    #print(f"after setting {cl}", model.classifier.cls_vec[cl])
+                    #print(model.classifier.cls_vec)
             novel_test_unsampled.append(cur_unsamp)
             #model.classifier.print_cls_vec_norms()
             for base_class_idx in base_class_idxs:
@@ -311,7 +315,7 @@ def novel_tester(model, cur_loss, base_test_data, novel_test_datas, bs = 4, epoc
             num_total = num_novel + num_base
             test_base_sb = Subset(base_test_data, test_b)
             test_base_dl = DataLoader(test_base_sb, batch_size=bs, shuffle=True)
-
+            #print("model classifier shape", model.classifier.cls_vec.shape)
             # test base ~~~~~~~~~~~~~~~~~~~~~
             base_confmat_path = ""
             if to_print == True:
@@ -325,7 +329,7 @@ def novel_tester(model, cur_loss, base_test_data, novel_test_datas, bs = 4, epoc
             if nep != None:
                 UN.nep_batch_parser(nep, res_base,batch_type=batch_type, train_phase = train_phase, ds_type=DatasetType.base, modelname = modelname, dsname = baseset, ds_idx=epoch_idx)
             if to_graph == True:
-                base_confmat_path = UR.plot_confmat(res_base['confmat'],multilabel=res_base['multilabel'],dest_dir=graph_dir, train_phase = train_phase, expr_num=expr_num, modelname = modelname, baseset=baseset, novelset=novelset)
+                base_confmat_path = UR.plot_confmat(res_base['confmat'],multilabel=res_base['multilabel'],dest_dir=graph_dir, train_phase = train_phase, expr_num=expr_num, modelname = modelname, baseset=baseset, novelset=novelset, is_base = True)
 
             if len(base_confmat_path) > 0 and nep != None:
                 UN.nep_confmat_upload(nep,base_confmat_path ,batch_type=BatchType.test, train_phase = train_phase, modelname = modelname, ds_type = DatasetType.base, dsname = baseset)
@@ -362,11 +366,16 @@ def novel_tester(model, cur_loss, base_test_data, novel_test_datas, bs = 4, epoc
             if to_res == True:
                 UR.res_csv_appender(res_novel, dest_dir=res_dir, expr_num = expr_num, epoch_idx=epoch_idx, batch_type=BatchType.test,modelname=modelname, baseset=baseset, novelset=novelset)
             if to_graph == True:
-                novel_confmat_path = UR.plot_confmat(res_novel['confmat'],multilabel=res_novel['multilabel'],dest_dir=graph_dir, train_phase = train_phase, expr_num=expr_num, modelname = modelname, baseset=baseset, novelset=novelset)
+                novel_confmat_path = UR.plot_confmat(res_novel['confmat'],multilabel=res_novel['multilabel'],dest_dir=graph_dir, train_phase = train_phase, expr_num=expr_num, modelname = modelname, baseset=baseset, novelset=novelset, is_base = False)
 
             if len(novel_confmat_path) > 0 and nep != None:
                 UN.nep_confmat_upload(nep,novel_confmat_path ,batch_type=BatchType.test, train_phase = train_phase, modelname = modelname, ds_type = DatasetType.novel, dsname = novelset)
+            both_confmat_path = ''
+            if len(novel_confmat_path) > 0 and  len(base_confmat_path) > 0:
+                both_confmat_path = UR.plot_confmat(res_base['confmat'],confmat2=res_novel['confmat'],multilabel=res_novel['multilabel'],dest_dir=graph_dir, train_phase = train_phase, expr_num=expr_num, modelname = modelname, baseset=baseset, novelset=novelset, is_base = False)
 
+            if len(both_confmat_path) > 0 and nep != None:
+                UN.nep_confmat_upload(nep,both_confmat_path ,batch_type=BatchType.test, train_phase = train_phase, modelname = modelname, ds_type = DatasetType.novel, dsname = novelset, ds_idx=2)
         
         
     

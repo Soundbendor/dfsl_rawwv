@@ -58,17 +58,28 @@ def train_valid_grapher(train_arr, valid_arr, dest_dir="graph", graph_key="loss_
     plt.savefig(fpath)
     plt.clf()
 
-def plot_confmat(confmat,dest_dir="graph", train_phase = TrainPhase.base_init, expr_num=0, modelname=ModelName.samplecnn, baseset=DatasetName.esc50, novelset=DatasetName.esc50,   multilabel=False):
+def plot_confmat(confmat,dest_dir="graph", confmat2 = None, train_phase = TrainPhase.base_init, expr_num=0, modelname=ModelName.samplecnn, baseset=DatasetName.esc50, novelset=DatasetName.esc50, is_base = True, multilabel=False):
 
     t_ph_name = train_phase.name
     t_ph_title = title_from_key(t_ph_name)
-    fname = f"{expr_num}-{modelname.name}-{baseset.name}-{novelset.name}_{train_phase.name}-confmat.png"
-    ctitle = f"{t_ph_title} Confusion Matrix\nfor {modelname.name}:{baseset.name}-{novelset.name}"
+    addstr = "base"
+    paddstr = "Base Set"
+    if is_base == False:
+        addstr = "novel"
+        paddstr  = "Novel Set"
+    if confmat2 != None:
+        addstr = "basenovel"
+        paddstr = "Base+Novel Set"
+    fname = f"{expr_num}-{addstr}-{modelname.name}-{baseset.name}-{novelset.name}_{train_phase.name}-confmat.png"
+    ctitle = f"{t_ph_title} ({paddstr}) Confusion Matrix\nfor {modelname.name}:{baseset.name}-{novelset.name}"
     fpath = os.path.join(dest_dir, fname)
     if multilabel == False:
         fig=plt.figure()
         ax=fig.add_subplot(1,1,1)
-        cur=ax.imshow(confmat,cmap='BuPu')
+        confmat_show = confmat
+        if confmat2 != None:
+            confmat_show = confmat + confmat2
+        cur=ax.imshow(confmat_show,cmap='BuPu')
         row=confmat.shape[0]
         majorstep = 10
         minorstep=1
@@ -81,6 +92,8 @@ def plot_confmat(confmat,dest_dir="graph", train_phase = TrainPhase.base_init, e
         ax.set_xticks(minortix, minor=True)
         ax.set_yticks(majortix)
         ax.set_yticks(minortix, minor=True)
+        plt.xlabel("Predicted")
+        plt.ylabel("True")
         #ax.grid(visible=True,which="minor", color="white", linestyle="-", alpha=0.5,linewidth=1)
     else:
         fig,ax = confmat.plot()

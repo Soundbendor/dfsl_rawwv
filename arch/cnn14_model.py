@@ -17,7 +17,7 @@ from util.types import BatchType,TrainPhase
 # (2) Kong, Q., Cao, Y., Iqbal, T., Wang, Y., Wang, W., and Plumbley, M. D. (2020). PANNs: Large-Scale Pretrained Audio Neural Networks for Audio Pattern Recognition. IEEE/ACM Transiations on Audio, Speech, and Language Processing, Vol. 2. doi: 10.1109/TASLP.2020.3030497
 
 class CNN14Model(nn.Module):
-    def __init__(self, in_ch=1, num_classes_base=10, num_classes_novel = 0, sr=44100, seed=3, omit_last_relu = True, dropout = 0.2, train_phase = TrainPhase.base_init, use_prelu = True, use_bias = False, cls_fn = 'cos_sim'):
+    def __init__(self, in_ch=1, num_classes_base=10, num_classes_novel = 0, sr=44100, seed=3, omit_last_relu = True, dropout = 0.2, train_phase = TrainPhase.base_init, use_prelu = False, use_bias = False, cls_fn = 'cos_sim'):
         """
         EMBEDDER Layers (stored in self.embedder)
         strided_list: tuples of (num, ksize, out_channels, stride)

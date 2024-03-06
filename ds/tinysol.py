@@ -83,7 +83,7 @@ class TinySOL(Dataset):
     #unmapped idxs
     def get_class_ex_idxs(self, class_idx):
         class_str = self.inst_list[class_idx]
-        return self.dfsub.where(self.dfsub[self.inst_cat] == class_str).dropna().index
+        return self.dfsub[self.dfsub[self.inst_cat] == class_str].index
         
     def get_mapped_class_idxs(self, c_idxs):
         ret_idxs = c_idxs
@@ -118,7 +118,7 @@ class TinySOL(Dataset):
         return cur_snd, ret_label
 
 
-def make_tinysol_fewshot_tasks(cur_df, folds=[], classes=[], n_way = 5, k_shot=np.inf, srate = 16000, samp_sz = 118098,  basefolder = UG.DEF_TINYSOLDIR, seed = 3, initial_label_offset = 30, to_label_tx = True):
+def make_tinysol_fewshot_tasks(cur_df, folds=[], classes=[], n_way = 5, k_shot=np.inf, srate = 16000, samp_sz = 118098,  basefolder = UG.DEF_TINYSOLDIR, seed = 3, initial_label_offset = 30, one_hot = True, to_label_tx = True):
     """
     returns array of (num_classes_added, ds) tups
     """
@@ -129,8 +129,8 @@ def make_tinysol_fewshot_tasks(cur_df, folds=[], classes=[], n_way = 5, k_shot=n
         num_classes_to_add = min(n_way, num_classes - num_classes_allocated)
         cur_classes = classes[num_classes_allocated: num_classes_allocated + num_classes_to_add]
         cur_label_offset = initial_label_offset + num_classes_allocated
-        cur_ds = TinySOL(cur_df, folds=folds, classes=cur_classes, k_shot=k_shot, srate=srate, samp_sz=samp_sz, basefolder = basefolder, seed= seed, label_offset = cur_label_offset, to_label_tx = to_label_tx)
+        cur_ds = TinySOL(cur_df, folds=folds, classes=cur_classes, k_shot=k_shot, srate=srate, samp_sz=samp_sz, basefolder = basefolder, seed= seed, label_offset = cur_label_offset, one_hot = one_hot, to_label_tx = to_label_tx)
         curtup = (num_classes_to_add, cur_ds)
         ret.append(curtup)
         num_classes_allocated += num_classes_to_add
- 
+    return ret 
