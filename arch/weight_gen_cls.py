@@ -44,7 +44,7 @@ class WeightGenCls(nn.Module):
         self.phi_avg.requires_grad_(False)
         self.phi_att.requires_grad_(False)
         self.phi_q.requires_grad_(False)
-        self.attn_smax = nn.Softmax(dim=0) #used to take attention over softmax for weight gen
+        self.attn_smax = nn.Softmax(dim=1) #used to take attention over softmax for weight gen
 
     def set_train_phase(self, cur_tph):
         self.train_phase = cur_tph
@@ -64,15 +64,15 @@ class WeightGenCls(nn.Module):
         self.exclude_idxs = exclude_idxs
         try:
             del self.cls_vec_copy
-            del self.cls_vec_attval
+            del self.cls_vec_pseudo
             del self.k_b_copy
         except:
             pass
         self.cls_vec_copy = Parameter(self.cls_vec.clone().detach()).to(device)
         self.cls_vec_copy.requires_grad_(False)
         self.cls_vec_copy[exclude_idxs] = 0.
-        self.cls_vec_attval = self.cls_vec_copy.clone().detach()
-        self.cls_vec_attval.requires_grad_(False)
+        self.cls_vec_pseudo = self.cls_vec_copy.clone().detach()
+        self.cls_vec_pseudo.requires_grad_(False)
         #self.cls_vec_copy.requires_grad_(True)
 
         #self.k_b_copy = self.k_b.clone().detach()
@@ -93,11 +93,11 @@ class WeightGenCls(nn.Module):
         self.exclude_idxs = []
         try:
             del self.cls_vec_copy
-            del self.cls_vec_attval
+            del self.cls_vec_pseudo
             #del self.k_b_copy
 
             self.cls_vec_copy = None
-            self.cls_vec_attval = None
+            self.cls_vec_pseudo = None
             #self.k_b_copy = None
 
         except:
@@ -146,43 +146,46 @@ class WeightGenCls(nn.Module):
         ret = torch.mul(to_mask, cur_mask)
         return ret
 
+
+
     def calc_w_att(self, z_arr):
-        # z_arr should be (k, dim)
-        att1 = torch.matmul(self.phi_q, z_arr.T) # should be (dim,dim) x (dim, k) = (dim, k)
-        #print(self.k_b.shape, att1.shape, self.phi_q.shape, z_arr.shape)
-        #print(att_out.shape)
-        multed = None
+        #z_arr = (k_shot, dim)
+        zq = torch.matmul(z_arr, self.phi_q) # (k_shot, dim) x (dim, dim) = (k_shot, dim)
+        # "spiked" cos sim, gives sim scores across rows for each k_shot input
+        cur_csim = self.gamma * self.cos_sim(zq, self.k_b) # (k_shot, dim) x (dim, nb) = (k_shot, nb)
+        # softmax over the base classes (dim = 1)
+        cur_smax = self.attn_smax(cur_csim)
+        attended = None
+        # each row sums over base classes for each k shot input
         if self.train_phase == TrainPhase.base_weightgen:
-            #cur_mask = self.calc_mask(self.k_b_copy)
-            att_out = self.gamma * self.cos_sim(self.k_b, att1.T) # (num_classes_base, dim) x (dim,k) = (num_classes_base, k)
-            multed = torch.matmul(self.attn_smax(att_out).T, self.cls_vec_attval) # (k, num_classes_base) x (num_classes_base, dim) = (k, dim)
+            # use the hacky pseudo copy of base vectors
+            attended = torch.matmul(cur_smax, self.cls_vec_pseudo)
         else:
-            att_out = self.gamma * self.cos_sim(self.k_b, att1.T) # (num_classes_base, dim) x (dim,k) = (num_classes_base, k)
-            multed = torch.matmul(self.attn_smax(att_out).T, self.cls_vec[:self.num_classes_base]) # (k, num_classes_base) x (num_classes_base, dim) = (k, dim)
-        #print(multed.shape)
-        #ret = (multed/self.num_classes_base).mean(dim=0) # div by num_classes_base to simulate taking mean, then take actual mean dim = 0 for mean across k
-        ret = torch.mean(multed,dim=0) #take actual mean dim = 0 for mean across k
-        return ret
+            # just use the normal base classifier vectors since no training
+            attended = torch.matmul(cur_smax, self.cls_vec[:self.num_classes_base])
+        kshot_mean = torch.mean(attended, dim=0) # mean over all kshot inputs
+        return kshot_mean
 
     def calc_w_n_plus_1(self, z_arr):
-        # z_arr should be (k, dim)
-        #z_arr.requires_grad_(False)
-        z_avg = torch.mean(z_arr,dim=0) # should be (dim)
-        #z_avg.requires_grad_(False)
-        w_att = self.calc_w_att(z_arr) # should be (dim)
-        w_n_plus_1 = torch.mul(self.phi_avg, z_avg) + torch.mul(self.phi_att, w_att)
-        return w_n_plus_1
-    
+        z_avg = torch.mean(z_arr, dim=0)
+        w_att = self.calc_w_att(z_arr)
+        cur_wn = torch.mul(self.phi_avg, z_avg) + torch.mul(self.phi_att, w_att)
+        return cur_wn
+        
     def set_pseudonovel_vec(self, k_novel_idx, k_novel_ft):
-        # k_novel_ft should be of size (k_novel, dim)
-        #k_novel_ft.requires_grad_(False)
+
+        #self.phi_avg = Parameter(torch.randn(dim)*self.sdev) # idea from (3)ish
+        #self.phi_att = Parameter(torch.randn(dim)*self.sdev) # idea from (3)ish
+        #self.phi_q = Parameter(nn.init.xavier_normal_(torch.zeros(dim,dim))) #idea from (3)ish
+        #k_b = torch.randn(num_classes_base, dim) * self.sdev # copying init of cls_vec idea from (3)
+        #self.k_b = Parameter(k_b)
         cur_wn = self.calc_w_n_plus_1(k_novel_ft)
+
         if self.train_phase == TrainPhase.base_weightgen:
             self.cls_vec_copy[k_novel_idx] = cur_wn
         else:
-
             self.cls_vec[k_novel_idx] = cur_wn
-            #print(self.cls_vec[k_novel_idx])
+
    
     def print_cls_vec_norms(self):
         cur_shape = self.cls_vec.shape

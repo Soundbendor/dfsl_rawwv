@@ -106,7 +106,7 @@ def runner(model, expr_num = 0, train_phase = TrainPhase.base_init, seed=UG.DEF_
         cur_classes = list(range(14))
         cur_n_way = 5
         cur_valid_folds = [0,1]
-        cur_test_folds = [2,3]
+        cur_test_folds = [2,4]
         cur_valid_k_shot = 19 * len(cur_valid_folds) # 19 is the minimal number of samples for an instrument
         cur_test_k_shot = 19 * len(cur_test_folds) # 19 is the minimal number of samples for an instrument
         # let's just stick with 5 seconds as a nice middle ground
