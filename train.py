@@ -557,7 +557,7 @@ if __name__ == "__main__":
     else:
         
         mtype = ModelName.cnn14
-        model = CNN14Model(in_ch=1, num_classes_base=num_classes_base, num_classes_novel=0, sr=args["sample_rate"], dropout = args["dropout"], seed=3, omit_last_relu = args["omit_last_relu"], train_phase = t_ph, use_prelu = args["use_prelu"], use_bias = args["use_bias"], cls_fn = args["cls_fn"]).to(device)
+        model = CNN14Model(in_ch=1, num_classes_base=num_classes_base, num_classes_novel=0, sr=args["sample_rate"], dropout = args["dropout"], dropout_final = args["dropout_final"], seed=3, omit_last_relu = args["omit_last_relu"], train_phase = t_ph, use_prelu = args["use_prelu"], use_bias = args["use_bias"], cls_fn = args["cls_fn"]).to(device)
 
     #save_str=f"{expr_num}-{modelname.name}-{dsname.name}_{mtype}_{epoch_idx}-model.pth"
     modelname = args["model"]

@@ -248,11 +248,13 @@ class WeightGenCls(nn.Module):
         ret = None
         if self.train_phase == TrainPhase.base_init:
         #idea from (3)
-            cur_mask = self.calc_mask(self.cls_vec)
+            #cur_mask = self.calc_mask(self.cls_vec)
             if self.cls_fn == 'cos_sim':
-                ret = self.tau * self.cos_sim(ipt,self.apply_mask(self.cls_vec, cur_mask))
+                #ret = self.tau * self.cos_sim(ipt,self.apply_mask(self.cls_vec, cur_mask))
+                ret = self.tau * self.cos_sim(ipt, self.cls_vec)
             else:
-                ret = self.rev_euc_dist(ipt,self.apply_mask(self.cls_vec, cur_mask))
+                #ret = self.rev_euc_dist(ipt,self.apply_mask(self.cls_vec, cur_mask))
+                ret = self.rev_euc_dist(ipt,self.cls_vec)
             #ret = self.cos_sim(ipt,self.apply_mask(self.cls_vec, cur_mask))
         elif self.train_phase == TrainPhase.base_weightgen:
             if self.cls_fn == 'cos_sim':
@@ -263,6 +265,7 @@ class WeightGenCls(nn.Module):
         else:
             if self.cls_fn == 'cos_sim':
                 ret = self.tau * self.cos_sim(ipt, self.cls_vec)
+                #print(ret)
             else:
 
                 ret = self.rev_euc_dist(ipt,self.cls_vec)

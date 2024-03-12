@@ -26,6 +26,7 @@ settings = {
         "rese2_dropout": 0.5,
         "simple_dropout": 0.5,
         "dropout": 0.2,
+        "dropout_final": 0.5,
         "save_ivl": 0,
         "data_dir": UG.DEF_DATADIR,
         "save_dir": UG.DEF_SAVEDIR,

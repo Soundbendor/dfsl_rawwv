@@ -11,29 +11,31 @@ from torch import nn
 class CNN14Block(nn.Module):
     def __init__(self, conv_in = 128, conv_out = 256, conv_ks = 3, conv_stride = 1, conv_pad = 1, dropout=0.2, ap_ks = 2, omit_last_relu = False, use_prelu = False, use_bias = False):
         super().__init__()
-        self.omit_last_relu = omit_last_relu
-        self.use_bias = use_bias
-        # (1) uses a ks-1 conv1d with batch norm to expand channels
-
         
-        # from this point on, conv_in == conv_out (since layers_exp fixes it)
-        self.layers = nn.Sequential()
-        self.num_groups = 2
-        last_nc = conv_in
-        for i in range(self.num_groups):
-            omit_relu = i == (self.num_groups -1) and omit_last_relu == True
-            self.layers.append(nn.Conv2d(last_nc, conv_out, (conv_ks,conv_ks), (conv_stride, conv_stride), (conv_pad, conv_pad), bias=use_bias))
-            self.layers.append(nn.BatchNorm2d(conv_out))
-            if omit_relu == False:
-                if use_prelu == True:
-                    self.layers.append(nn.PReLU())
-                else:
-                    self.layers.append(nn.ReLU())
-            last_nc = conv_out
-
-        self.layers.append(nn.AvgPool2d((ap_ks,ap_ks)))
+        c1 = nn.Conv2d(conv_in, conv_out, (conv_ks, conv_ks), stride=(conv_stride, conv_stride), padding=(conv_pad, conv_pad), bias=use_bias)
+        bn1 = nn.BatchNorm2d(conv_out)
+        nl1 = None
+        if use_prelu == True:
+            nl1 = nn.PReLU()
+        else:
+            nl1 = nn.ReLU()
+        c2 = nn.Conv2d(conv_out, conv_out, (conv_ks, conv_ks), stride=(conv_stride, conv_stride), padding=(conv_pad, conv_pad), bias=use_bias)
+        bn2 = nn.BatchNorm2d(conv_out)
+        self.layers = nn.Sequential(c1, bn1, nl1, c2, bn2)
+        if omit_last_relu == False:
+            nl2 = None
+            if use_prelu == True:
+                nl2 = nn.PReLU()
+            else:
+                nl2 = nn.ReLU()
+            self.layers.append(nl2)
+        if ap_ks > 0:
+            ap1 = nn.AvgPool2d((ap_ks, ap_ks))
+            self.layers.append(ap1)
         if dropout > 0:
-            self.layers.append(nn.Dropout(p=dropout))
+            do1 = nn.Dropout(p=dropout)
+            self.layers.append(do1)
+
         #print(self.layers)
     def forward(self, cur_ipt):
         net_out = self.layers(cur_ipt)

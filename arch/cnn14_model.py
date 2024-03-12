@@ -15,64 +15,45 @@ from util.types import BatchType,TrainPhase
 
 # (1) Kong, Qiuqiang (2021). audioset_tagging_cnn [Github Repository]. Github. https://github.com/qiuqiangkong/audioset_tagging_cnn
 # (2) Kong, Q., Cao, Y., Iqbal, T., Wang, Y., Wang, W., and Plumbley, M. D. (2020). PANNs: Large-Scale Pretrained Audio Neural Networks for Audio Pattern Recognition. IEEE/ACM Transiations on Audio, Speech, and Language Processing, Vol. 2. doi: 10.1109/TASLP.2020.3030497
-
+# (3) torchaudio.transforms._transforms https://pytorch.org/audio/stable/_modules/torchaudio/transforms/_transforms.html#MFCC
 class CNN14Model(nn.Module):
-    def __init__(self, in_ch=1, num_classes_base=10, num_classes_novel = 0, sr=44100, seed=3, omit_last_relu = True, dropout = 0.2, train_phase = TrainPhase.base_init, use_prelu = False, use_bias = False, cls_fn = 'cos_sim'):
-        """
-        EMBEDDER Layers (stored in self.embedder)
-        strided_list: tuples of (num, ksize, out_channels, stride)
-        basic_list: tuples of (num, ksize, out_channels, stride)
-        res1_list: tuples of (num, ksize, out_channels, stride)
-        res2_list: tuples of (num, ksize, out_channels, stride)
-        se_list: tuples of (num, ksize, out_channels, stride)
-        rese1_list: tuples of (num, ksize, out_channels, stride)
-        rese2_list: tuples of (num, ksize, out_channels, stride)
-        simple_list: tuples of (num, ksize, out_channels, stride) (channels ignored since only one channel)
-
-        Adds in order stride,basic, res1, res2, se, rese1, rese2, simple
-
-        CLASSIFIER Layers (stored in self.classifier):
-        use_classifier: to use a classifier or not
-        fc_dim: inner dimension of classifier
-        num_classes_base: number of classes to classify
-        """
+    def __init__(self, in_ch=1, num_classes_base=10, num_classes_novel = 0, sr=16000, seed=3, omit_last_relu = True, dropout = 0.2, dropout_final = 0.5, train_phase = TrainPhase.base_init, use_prelu = False, use_bias = False, cls_fn = 'cos_sim'):
         super().__init__()
         self.in_ch = in_ch
         self.num_classes_base = num_classes_base
         self.num_classes_novel = num_classes_novel
         self.sr = sr
         self.train_phase = train_phase
+        #self.in_samples = AU.insize_by_blocks2(cur_blklist)
+        #self.in_sec = AU.samp_to_sec(self.in_samples,sr=sr)
+        #self.flatten = torch.nn.Flatten(start_dim=-2)
+        
+        # output of embedder should be (n, prev_ch, 1)
+        # middle dim according to (1) is same as num channels
+        
         n_fft = int( AU.ms_to_samp(64,sr=sr))
         win_length = int( AU.ms_to_samp(25, sr=sr))
         hop_size = int( AU.ms_to_samp(10, sr=sr))
+        self.logfuzz = 1e-6 # torchaudio adds fuzz internally
         #window = torch.hann_window(window_length=win_length)
         #n_fft = 1024 # 64ms at 16 khz
         #win_length = 400 # 25ms at 16 khz
         #hop_size = 160 # 10ms at 16 khz
         bins = 64
-        self.melspect = TATX.MelSpectrogram(sample_rate = sr, n_fft= n_fft,win_length= win_length, hop_length = hop_size, n_mels = bins, window_fn=torch.hann_window)
-        ch_pool_tup = [(64,2),(128,2),(256,2),(512,2),(1024,2),(2048,1)]
-        # (num, ksize, stride)
-        cur_blks = []
-        prev_ch = 1
-        for i,(ch,p_ks) in enumerate(ch_pool_tup):
-            omit_relu = (i == len(ch_pool_tup) - 1) and omit_last_relu == True
-            cur_blk = CNN14Block(conv_in = prev_ch, conv_out = ch, conv_ks = 3, conv_stride = 1, conv_pad = 1, dropout=dropout, ap_ks = p_ks, omit_last_relu = omit_relu, use_prelu = use_prelu, use_bias = use_bias)
-            blkstr = f"conv{i+1}"
-            ctup = (blkstr, cur_blk)
-            cur_blks.append(ctup)
-            prev_ch = ch
-        self.embedder = nn.Sequential(OrderedDict(cur_blks))
-        self.out_ch = prev_ch
-        #self.in_samples = AU.insize_by_blocks2(cur_blklist)
-        #self.in_sec = AU.samp_to_sec(self.in_samples,sr=sr)
-        #self.flatten = torch.nn.Flatten(start_dim=-2)
-        
-        self.flatten = torch.nn.Flatten(start_dim=-2)
-        # output of embedder should be (n, prev_ch, 1)
-        # middle dim according to (1) is same as num channels
-        
-        self.classifier = WeightGenCls(num_classes_base = num_classes_base, num_classes_novel = num_classes_novel, dim=ch, seed=seed, train_phase=train_phase, cls_fn=cls_fn)
+        self.melspect = TATX.MelSpectrogram(sample_rate=sr, n_fft = n_fft, win_length = win_length, hop_length = hop_size, n_mels = bins, window_fn = torch.hann_window)
+        # number of (out) channels and avg pooling kernel size
+        ch_pl = [(64,2), (128, 2), (256, 2), (512, 2), (1024, 2), (2048,1)]
+        # last (1,1) pooling size not in paper (2) but in github repo (1) 
+        self.embedder = nn.Sequential()
+        prev_ch = in_ch
+        for idx,(out_ch, ap_ks) in enumerate(ch_pl):
+            to_omit_relu = (idx == (len(ch_pl) - 1) and omit_last_relu == True)
+            cur_blk = CNN14Block(conv_in = prev_ch, conv_out = out_ch, conv_ks = 3, conv_stride = 1, conv_pad = 1, dropout=dropout, ap_ks = ap_ks, omit_last_relu = to_omit_relu , use_prelu = use_prelu, use_bias = use_bias)
+            self.embedder.append(cur_blk)
+            prev_ch = out_ch
+
+        self.last_dropout = nn.Dropout(p=dropout_final)
+        self.classifier = WeightGenCls(num_classes_base = num_classes_base, num_classes_novel = num_classes_novel, dim=out_ch, seed=seed, train_phase=train_phase, cls_fn=cls_fn)
  
     def freeze_embedder(self,to_freeze):
         self.embedder.requires_grad_(to_freeze==False)
@@ -130,15 +111,24 @@ class CNN14Model(nn.Module):
         # k_novel_ex should be of size (k_novel, input_dim)
         #print(k_novel_ex.type())
         with (torch.no_grad() if self.train_phase != TrainPhase.base_weightgen else contextlib.nullcontext()):
-            txed = self.melspect(k_novel_ex)
-            emb_out = self.embedder(txed)
-            cmean_w = torch.mean(emb_out, dim=3)
-            cmax_h = torch.max(cmean_w, dim=2)[0] # returns tuple of values and indices
-            cmean_h = torch.mean(cmean_w, dim=2)
-            cm_out = cmax_h + cmean_h 
-
+            mel_out = self.melspect(k_novel_ex)
+            log_txed = torch.log(mel_out + self.logfuzz)
+            # k_novel, channels, n_mels_time
+            emb_out = self.embedder(log_txed)
+            # k_novel, out_channel, n_mels, time
+            emb_tr = emb_out.transpose(-2,-1)
+            # k_novel, out_channel, time, n_mels
+            # average over n_mels per timestep
+            cmean_mel = torch.mean(emb_tr, dim=3)
+            # get max from time steps
+            cmax_time = torch.max(cmean_mel, dim=2)[0] # returns tuple of values and indices
+            # get mean from time steps
+            cmean_time = torch.mean(cmean_mel, dim=2)
+            cm_out = cmax_time + cmean_time
+            # (1) has last dropout before FCN
+            do_out = self.last_dropout(cm_out) # not sure if need?
             #k_novel_ft = self.flatten(cm_out)
-            self.classifier.set_pseudonovel_vec(k_novel_idx, cm_out)
+            self.classifier.set_pseudonovel_vec(k_novel_idx, do_out)
     """
     def set_pseudonovel_vecs(self, k_novel_idxs, k_novel_sz, k_novel_exs):
         # k_novel_idxs should be of size k_novel
@@ -152,24 +142,25 @@ class CNN14Model(nn.Module):
        self.num_classes_novel = self.classifier.renum_novel_classes(num_novel,device=device)
 
     def forward(self, cur_ipt):
-        #torch.Size([5, 1, 64, 1108]) out of spectrogram
-        #torch.Size([5, 2048, 2, 34]) out of embeddr
+        # batchsize, samplen
+        mel_out = self.melspect(cur_ipt)
+        # batchsize, channel, n_mels, time
+        logmel_out = torch.log(mel_out + self.logfuzz)
+        #print(logmel_out)
+        emb_out = self.embedder(logmel_out)
+        # batchsize, out_channel, n_mels, time
+        emb_tr = emb_out.transpose(-2,-1)
+        # batchsize, out_channel, time, n_mels
+        # average over n_mels per timestep
+        cmean_mel = torch.mean(emb_tr, dim=3)
+        # get max from time_steps
+        cmax_time = torch.max(cmean_mel, dim=2)[0] # returns tuple of values and indices
+        # get mean from time steps
+        cmean_time = torch.mean(cmean_mel, dim=2)
+        cm_out = cmax_time + cmean_time
+        # (1) has last dropout before FCN
+        do_out = self.last_dropout(cm_out)
 
-        txed = self.melspect(cur_ipt)
-        #print(txed.shape)
-        emb_out = self.embedder(txed)
-        #print(emb_out.shape)
-        
-        # borrowing format of (1), this is the global pooling mentioned in (2)
-        cmean_w = torch.mean(emb_out, dim=3)
-        cmax_h = torch.max(cmean_w, dim=2)[0] # returns tuple of values and indices
-        cmean_h = torch.mean(cmean_w, dim=2)
-        cm_out = cmax_h + cmean_h 
-
-        #flat_out = self.flatten(cm_out)
-        #print(flat_out.shape)
-        net_out = self.classifier(cm_out)
-        #print(net_out.shape)
+        net_out = self.classifier(do_out)
         return net_out
-        #print(emb_out.shape)
 
