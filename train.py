@@ -40,7 +40,7 @@ def make_folder(cur_arg, cur_dir):
         os.makedirs(cur_dir)
 
 
-def runner(model, expr_num = 0, train_phase = TrainPhase.base_init, seed=UG.DEF_SEED, sr = 16000, max_samp = 118098, max_rng=10000, lr = 1e-4, bs=4, label_smoothing = 0.0, graph_dir = UG.DEF_GRAPHDIR, save_dir = UG.DEF_SAVEDIR, res_dir = UG.DEF_RESDIR, data_dir = UG.DEF_ESC50DIR, base_epochs=1, weightgen_epochs = 10, novel_epochs = 10, save_ivl=0, n_way = 5, k_shot = 4, use_class_weights = False, to_print=True, to_time = True, to_graph=True, to_res = True, modelname = ModelName.samplecnn, baseset = DatasetName.esc50, novelset = DatasetName.esc50, device='cpu', multilabel=True, nep=None):
+def runner(model, expr_num = 0, train_phase = TrainPhase.base_init, seed=UG.DEF_SEED, sr = 16000, max_samp = 118098, max_rng=10000, lr = 1e-4, lr_weightgen = 1e-4, bs=4, label_smoothing = 0.0, graph_dir = UG.DEF_GRAPHDIR, save_dir = UG.DEF_SAVEDIR, res_dir = UG.DEF_RESDIR, data_dir = UG.DEF_ESC50DIR, base_epochs=1, weightgen_epochs = 10, novel_epochs = 10, save_ivl=0, n_way = 5, k_shot = 4, use_class_weights = False, to_print=True, to_time = True, to_graph=True, to_res = True, modelname = ModelName.samplecnn, baseset = DatasetName.esc50, novelset = DatasetName.esc50, device='cpu', multilabel=True, nep=None):
     rng = np.random.default_rng(seed=seed)
     cur_seed = rng.integers(0,max_rng,1)[0]
     torch.manual_seed(seed)
@@ -50,7 +50,9 @@ def runner(model, expr_num = 0, train_phase = TrainPhase.base_init, seed=UG.DEF_
         cur_loss = nn.BCEWithLogitsLoss()
     else:
         cur_loss = nn.CrossEntropyLoss(label_smoothing=label_smoothing)
+
     cur_optim = torch.optim.Adam(model.parameters(), lr=lr)
+    cur_optim_weightgen = torch.optim.Adam(model.parameters(), lr=lr_weightgen)
     
     esc50path = os.path.join(data_dir, "ESC-50-master")
     esc50_df = pd.read_csv(os.path.join(esc50path, "meta", "esc50.csv"))
@@ -124,7 +126,7 @@ def runner(model, expr_num = 0, train_phase = TrainPhase.base_init, seed=UG.DEF_
         base_tester(model,cur_loss,base_test_data, expr_num= expr_num, bs=bs, num_classes = num_classes_base, res_dir=res_dir, graph_dir = graph_dir, to_print=to_print, to_time=to_time, to_graph=to_graph, to_res=to_res,device=device,pretrain=(train_phase != TrainPhase.base_init), modelname = modelname, baseset = baseset, novelset = novelset, multilabel=multilabel, nep=nep)
 
     if train_phase in [TrainPhase.base_weightgen, TrainPhase.base_trainall, TrainPhase.run_all]:
-        base_weightgen_trainer(model, cur_loss, cur_optim, base_train_data, base_valid_data, lr=lr, bs = bs, epochs = weightgen_epochs, save_ivl = save_ivl, save_dir = save_dir, res_dir = res_dir, graph_dir = graph_dir, device = device, expr_num = expr_num, multilabel=multilabel,num_classes = num_classes_base, to_print = to_print, to_time = to_time, to_graph = to_graph, to_res = to_res, rng = rng, n_way = n_way, k_shot = k_shot, modelname = modelname, baseset=baseset, novelset=novelset, nep=nep)
+        base_weightgen_trainer(model, cur_loss, cur_optim_weightgen, base_train_data, base_valid_data, lr=lr, bs = bs, epochs = weightgen_epochs, save_ivl = save_ivl, save_dir = save_dir, res_dir = res_dir, graph_dir = graph_dir, device = device, expr_num = expr_num, multilabel=multilabel,num_classes = num_classes_base, to_print = to_print, to_time = to_time, to_graph = to_graph, to_res = to_res, rng = rng, n_way = n_way, k_shot = k_shot, modelname = modelname, baseset=baseset, novelset=novelset, nep=nep)
  
     if train_phase in [TrainPhase.novel_valid, TrainPhase.run_all]:
         novel_tester(model, cur_loss, base_test_data, novel_val_datas, bs = bs, epochs = novel_epochs, res_dir = res_dir, graph_dir = graph_dir, device = device, expr_num = expr_num, to_print = to_print, to_time = to_time, to_graph = to_graph, to_res = to_res, rng = rng, n_way = n_way, k_shot = k_shot, max_num_test=8,  modelname = modelname, baseset = baseset, novelset = novelset, train_phase=TrainPhase.novel_valid, batch_type=BatchType.test, multilabel = multilabel, nep = nep)
@@ -382,76 +384,74 @@ def novel_tester(model, cur_loss, base_test_data, novel_test_datas, bs = 4, epoc
 
     
 
+# batches of 100 samples of pseudo-novel classes, 100 samples of remaining base classes
+# 1. sample M "pseudo" novel classes from base classes, K per class for weight generator
+# 2. goes into new classification matrix W* = pseudo novel weights (above) + rest of original weights
+# update weight generator AND base classification weight vectors on loss from batch of base + pseudo-novel
 def base_weightgen_trainer(model, cur_loss, cur_optim, train_data, valid_data, lr=1e-4, bs = 4, epochs = 1, save_ivl = 0, save_dir = UG.DEF_SAVEDIR, res_dir = UG.DEF_RESDIR, graph_dir = UG.DEF_GRAPHDIR, device = 'cpu', expr_num = 0, num_classes = 30, to_print = True, to_time = True, to_graph = True, to_res = True, rng = None, n_way = 5, k_shot = 5, total_novel_samp = 100, total_base_samp = 100, modelname = ModelName.samplecnn, baseset=DatasetName.esc50, novelset = DatasetName.esc50, multilabel=True, nep = None):
     model.set_train_phase(TrainPhase.base_weightgen)
     model.zero_grad()
     cur_optim.zero_grad()
     #unmapped base class indices
-    base_classes = train_data.get_class_idxs()
-    num_base_classes = len(base_classes)
-    num_rest = num_base_classes - n_way
-    # number of unsampled from novel to take for training against
-    num_novel_unsampled = int((total_novel_samp - (n_way * k_shot))/n_way)
-    # number of unsampled (all of them are) to take for training against (from rest of base classes)
-    num_base_unsampled = int(total_base_samp/num_rest)
-    res_wgen_batches = []
-    res_valid_batches = []
-    valid_dload = DataLoader(valid_data, shuffle=True, batch_size = bs)
-    #print("called")
-    if rng == None:
-        rng = np.random.default_rng(seed=UG.DEF_SEED)
-    for epoch_idx in range(epochs):
-        #print("called")
-        cur_novel = rng.choice(base_classes, size=n_way, replace=False)
-        cur_base = np.setdiff1d(base_classes,cur_novel)
-        # first sample from each class the examples to use to generate the classification vectors
-        # and then some how sample other examples for t_novel and t_test (see gidaris supp)
-        # and then do backprop to learn phi matrices and vectors
-        # one idea is to sample t_novel from the remaining examples from the training set to there's only 8 vectors per class (wang doesn't specify where these come from)
-        # another idea is to sample from validation set but then that might be information leakage
-        # in any case, T_novel should be the same as t_base per class (ideally)
-        # and we are only SIMULATING few-shot so it doesn't actually have to be fewshot
-        # for learning novel classes, phi matrices should be fixed
-       
-        model.set_exclude_idxs(train_data.get_mapped_class_idxs(cur_novel), device=device)
-        test_k = np.array([],dtype=int)
-        test_b = np.array([], dtype=int)
-        #print("for0")
-        for novel_cls in cur_novel: # sampling for classification vectors
-            cur_k_idxs = train_data.get_class_ex_idxs(novel_cls)
-            # examples for weight generator
-            wg_k = rng.choice(cur_k_idxs, size=k_shot, replace=False)
-            unsampled = np.setdiff1d(cur_k_idxs, wg_k)
-            cur_subset = Subset(train_data, wg_k)
-            subset_dl = DataLoader(cur_subset, batch_size=k_shot, shuffle=False)
-            #print(wg_k, unsampled)
+    base_class_idxs = train_data.get_class_idxs()
 
-            # pick from unsampled to test against
-            unsampled_samp = rng.choice(unsampled, size=num_novel_unsampled, replace=False)
-            test_k = np.append(test_k,unsampled_samp)
-            #print("for1")
-            for ci,cl in subset_dl:
-                #print("cicl")
-                model.set_pseudonovel_vec(train_data.get_mapped_class_idx(novel_cls), ci.to(device))
-        for base_cls in cur_base:
-            cur_b_idxs = train_data.get_class_ex_idxs(base_cls)
-            base_test = rng.choice(cur_b_idxs, size=num_base_unsampled, replace=False)
-            test_b = np.append(test_b, base_test)
-        test_all = np.append(test_k,test_b)
-        test_set = Subset(train_data, test_all)
-        test_dl = DataLoader(test_set, batch_size=bs, shuffle=True) 
+    # get an idea of how many to sample for the query set
+    # this is assuming an even divide between all classes
+    novel_ex_per_class = int(total_novel_samp/n_way)
+    # this is the classes left over after sampling n_way classes from base classes
+    base_ex_per_class = int(total_base_samp/(len(base_class_idxs)-n_way))
+    # take the minimum of the two to ensure a fair-ish split
+    ex_per_class = min(novel_ex_per_class, base_ex_per_class)
+    # number of batches
+    for epoch_idx in range(epochs):
+        # unmapped pseudonovel idxs
+        pseudo_novel_class_idxs = rng.choice(base_class_idxs, size=n_way, replace=False)
+        pseudo_base_class_idxs = np.setdiff1d(base_class_idxs, pseudo_novel_class_idxs)
+        # mask out class_idxs that are serving as the pseudo-novel classes
+        # since the model learned on the mapped index, need to map to mapped idxs
+        model.set_exclude_idxs(train_data.get_mapped_class_idxs(pseudo_novel_class_idxs), device=device)
+        # collect all examples not used for support set, keep divided per class
+        # for the heck of it, should be a tuple of number of examples, and then the actual indices
+        unsampled_pseudo_novel_ex_idxs = []
+        for pseudo_novel_class_idx in pseudo_novel_class_idxs:
+            pseudo_novel_ex_idxs = train_data.get_class_ex_idxs(pseudo_novel_class_idx)
+            pseudo_novel_ex_support = rng.choice(pseudo_novel_ex_idxs, size=k_shot, replace=False)
+            unsampled_pseudo_novel_ex = np.setdiff1d(pseudo_novel_ex_idxs, pseudo_novel_ex_support)
+            cur_num_unsampled = unsampled_pseudo_novel_ex.shape[0]
+
+            unsampled_pseudo_novel_ex_idxs.append((cur_num_unsampled, unsampled_pseudo_novel_ex))
+            pseudo_novel_support_subset = Subset(train_data, pseudo_novel_ex_support)
+            pseudo_novel_support_dl = DataLoader(pseudo_novel_support_subset, batch_size=k_shot, shuffle=False)
+            for support_examples,support_labels in pseudo_novel_support_dl:
+                # needs to be mapped because model was trained on mapped class idxs
+                model.set_pseudonovel_vec(train_data.get_mapped_class_idx(pseudo_novel_class_idx), support_examples.to(device))
+        num_pseudo_novel_unsampled_per_class = [num for (num,idxs) in unsampled_pseudo_novel_ex_idxs]
+        # get min of num sampled and also the min of the "even" divide per class
+        number_to_sample = min(np.min(num_pseudo_novel_unsampled_per_class), ex_per_class)
+        # actually sample indices that will go into query set, starting with pseudonovel
+        query_idxs = np.array([], dtype=int)
+        for (num,pn_idxs) in unsampled_pseudo_novel_ex_idxs:
+            query_idxs_by_class = rng.choice(pn_idxs, size=number_to_sample,replace=False)
+            query_idxs = np.hstack((query_idxs, query_idxs_by_class))
+        # now build up query indices from pseudo_base classes
+        for pseudo_base_class_idx in pseudo_base_class_idxs:
+            pseudo_base_ex_idxs = train_data.get_class_ex_idxs(pseudo_base_class_idx)
+            pseudo_base_ex_query = rng.choice(pseudo_base_ex_idxs, size=number_to_sample, replace=False)
+            query_idxs = np.hstack((query_idxs, pseudo_base_ex_query))
+        query_set = Subset(train_data, query_idxs)
+        query_dl = DataLoader(query_set, batch_size=bs, shuffle=True)
         model.weightgen_train_enable(True)
         if to_print == True:
             print(f"\nEpoch {epoch_idx}\n ==========================")
-        res_wgen = batch_handler(model, [test_dl], cur_loss, cur_opter=cur_optim, batch_type = BatchType.train, device=device, epoch_idx=epoch_idx, train_phase = TrainPhase.base_weightgen, bs=bs, num_classes = num_classes, to_print=to_print, to_time = to_time, modelname=modelname, dsname = baseset, multilabel=multilabel)
+        res_wgen = batch_handler(model, [query_dl], cur_loss, cur_opter=cur_optim, batch_type = BatchType.train, device=device, epoch_idx=epoch_idx, train_phase = TrainPhase.base_weightgen, bs=bs, num_classes = num_classes, to_print=to_print, to_time = to_time, modelname=modelname, dsname = baseset, multilabel=multilabel)
         #print("got to here")
         if to_res == True:
             UR.res_csv_appender(res_wgen, dest_dir=res_dir, expr_num = expr_num, epoch_idx=epoch_idx, batch_type=BatchType.train, train_phase = TrainPhase.base_weightgen, baseset=baseset, novelset = novelset )
 
         if nep != None:
             UN.nep_batch_parser(nep, res_wgen,batch_type=BatchType.train, train_phase = TrainPhase.base_weightgen, ds_type = DatasetType.base, modelname=modelname, dsname=baseset, ds_idx=0)
-        res_valid = batch_handler(model, [valid_dload], cur_loss, cur_opter=None, batch_type = BatchType.valid, device=device, epoch_idx=epoch_idx, bs=bs, to_print=to_print, to_time = to_time, num_classes = num_classes, modelname=modelname, dsname=baseset, multilabel=multilabel)
-
+        #res_valid = batch_handler(model, [valid_dload], cur_loss, cur_opter=None, batch_type = BatchType.valid, device=device, epoch_idx=epoch_idx, bs=bs, to_print=to_print, to_time = to_time, num_classes = num_classes, modelname=modelname, dsname=baseset, multilabel=multilabel)
+        """
         if to_res == True:
             UR.res_csv_appender(res_valid, dest_dir=res_dir, expr_num = expr_num, epoch_idx=epoch_idx, batch_type=BatchType.valid, modelname=modelname, train_phase = TrainPhase.base_weightgen, baseset = baseset, novelset = novelset, pretrain = False)
         res_wgen_batches.append(res_wgen)
@@ -459,7 +459,7 @@ def base_weightgen_trainer(model, cur_loss, cur_optim, train_data, valid_data, l
 
         if nep != None:
             UN.nep_batch_parser(nep, res_valid,batch_type=BatchType.valid, train_phase = TrainPhase.base_weightgen, ds_type=DatasetType.base, modelname=modelname, dsname = baseset, ds_idx=0)
-
+        """
         # ~~~ end of loop save stuff ~~~
         model.weightgen_train_enable(False)
         model.reset_copies(copy_back=True,device=device)
@@ -470,11 +470,14 @@ def base_weightgen_trainer(model, cur_loss, cur_optim, train_data, valid_data, l
 
 
 
-    if to_graph == True:
-        UR.train_valid_grapher(res_wgen_batches, res_valid_batches, dest_dir="graph", graph_key="loss_avg", expr_num=expr_num, baseset = baseset, novelset = novelset, modelname = modelname )
-        UR.train_valid_grapher(res_valid_batches, res_valid_batches, dest_dir="graph", graph_key="time_avg", expr_num=expr_num,  baseset = baseset, novelset = novelset, modelname = modelname )
 
 
+
+
+
+            
+
+    
 def base_init_trainer(model, cur_loss, cur_optim, train_data, valid_data, lr=1e-4, bs = 4, epochs = 1, save_ivl=0, save_dir=UG.DEF_SAVEDIR, res_dir = UG.DEF_RESDIR, graph_dir = UG.DEF_GRAPHDIR, device='cpu', expr_num = 0, num_classes = 30, to_print = True, to_time = True, to_graph = True, to_res = True, modelname = ModelName.samplecnn, baseset = DatasetName.esc50, novelset = DatasetName.esc50, multilabel=True, nep=None):
     model.set_train_phase(TrainPhase.base_init)
     train_dload = DataLoader(train_data, shuffle=True, batch_size = bs)
@@ -607,7 +610,8 @@ if __name__ == "__main__":
     #print(model.embedder.state_dict())
     bstype = DatasetName[args["baseset"]]
     nstype = DatasetName[args["novelset"]]
-    runner(model, train_phase = t_ph,expr_num = expr_num, lr=args["learning_rate"], bs=args["batch_size"],
+    runner(model, train_phase = t_ph,expr_num = expr_num, lr=args["learning_rate"],
+            lr_weightgen = args["learning_rate_weightgen"], bs=args["batch_size"],
             base_epochs=args["base_epochs"], weightgen_epochs = args["weightgen_epochs"], novel_epochs = args["novel_epochs"],
             save_ivl = args["save_ivl"], sr = args["sample_rate"], max_samp = max_samp, use_class_weights = args["use_class_weights"], label_smoothing = args["label_smoothing"], 
             multilabel=args["multilabel"], res_dir=args["res_dir"], save_dir=args["save_dir"],

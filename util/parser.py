@@ -6,6 +6,7 @@ import tomllib
 
 settings = {
         "learning_rate": 0.00025,
+        "learning_rate_weightgen": 0.0001,
         "model": "samplecnn",
         "cls_fn": 'cos_sim',
         "sample_rate": 16000,
