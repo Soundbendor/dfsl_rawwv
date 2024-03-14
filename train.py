@@ -40,7 +40,7 @@ def make_folder(cur_arg, cur_dir):
         os.makedirs(cur_dir)
 
 
-def runner(model, expr_num = 0, train_phase = TrainPhase.base_init, seed=UG.DEF_SEED, sr = 16000, max_samp = 118098, max_rng=10000, lr = 1e-4, lr_weightgen = 1e-4, bs=4, label_smoothing = 0.0, graph_dir = UG.DEF_GRAPHDIR, save_dir = UG.DEF_SAVEDIR, res_dir = UG.DEF_RESDIR, data_dir = UG.DEF_ESC50DIR, base_epochs=1, weightgen_epochs = 10, novel_epochs = 10, save_ivl=0, n_way = 5, k_shot = 4, use_class_weights = False, to_print=True, to_time = True, to_graph=True, to_res = True, modelname = ModelName.samplecnn, baseset = DatasetName.esc50, novelset = DatasetName.esc50, device='cpu', multilabel=True, nep=None):
+def runner(model, expr_num = 0, train_phase = TrainPhase.base_init, seed=UG.DEF_SEED, sr = 16000, max_samp = 118098, max_rng=10000, lr = 1e-4, lr_weightgen = 1e-4, bs=4, label_smoothing = 0.0, graph_dir = UG.DEF_GRAPHDIR, save_dir = UG.DEF_SAVEDIR, res_dir = UG.DEF_RESDIR, base_dir = UG.DEF_ESC50DIR,  novel_dir = UG.DEF_ESC50DIR, base_epochs=1, weightgen_epochs = 10, novel_epochs = 10, save_ivl=0, n_way = 5, k_shot = 4, use_class_weights = False, to_print=True, to_time = True, to_graph=True, to_res = True, modelname = ModelName.samplecnn, baseset = DatasetName.esc50, novelset = DatasetName.esc50, device='cpu', multilabel=True, nep=None):
     rng = np.random.default_rng(seed=seed)
     cur_seed = rng.integers(0,max_rng,1)[0]
     torch.manual_seed(seed)
@@ -53,11 +53,24 @@ def runner(model, expr_num = 0, train_phase = TrainPhase.base_init, seed=UG.DEF_
 
     cur_optim = torch.optim.Adam(model.parameters(), lr=lr)
     cur_optim_weightgen = torch.optim.Adam(model.parameters(), lr=lr_weightgen)
-    
-    esc50path = os.path.join(data_dir, "ESC-50-master")
-    esc50_df = pd.read_csv(os.path.join(esc50path, "meta", "esc50.csv"))
-    tinysolpath = os.path.join(data_dir, "TinySOL")
-    tinysol_df = pd.read_csv(os.path.join(tinysolpath, "TinySOL_metadata.csv"))
+   
+    esc50_df = None
+    tinysol_df = None
+    esc50path = None
+    tinysolpath = None
+    #esc50path = os.path.join(data_dir, "ESC-50-master")
+    if baseset == DatasetName.esc50:
+        esc50path = base_dir
+        esc50_df = pd.read_csv(os.path.join(base_dir, "meta", "esc50.csv"))
+    if novelset == DatasetName.esc50:
+        esc50path = novel_dir
+        esc50_df = pd.read_csv(os.path.join(novel_dir, "meta", "esc50.csv"))
+    if baseset == DatasetName.tinysol:
+        tinysolpath = base_dir
+        tinysol_df = pd.read_csv(os.path.join(base_dir, "TinySOL_metadata.csv"))
+    if novelset == DatasetName.tinysol:
+        tinysolpath = novel_dir
+        tinysol_df = pd.read_csv(os.path.join(novel_dir, "TinySOL_metadata.csv"))
 
    
     esc50_num_classes_base = 30
@@ -615,7 +628,7 @@ if __name__ == "__main__":
             base_epochs=args["base_epochs"], weightgen_epochs = args["weightgen_epochs"], novel_epochs = args["novel_epochs"],
             save_ivl = args["save_ivl"], sr = args["sample_rate"], max_samp = max_samp, use_class_weights = args["use_class_weights"], label_smoothing = args["label_smoothing"], 
             multilabel=args["multilabel"], res_dir=args["res_dir"], save_dir=args["save_dir"],
-            to_print=args["to_print"], to_time=args["to_time"], graph_dir = args["graph_dir"], data_dir=args["data_dir"], to_graph=args["to_graph"], to_res=args["to_res"],
+            to_print=args["to_print"], to_time=args["to_time"], graph_dir = args["graph_dir"], base_dir=args["base_dir"], novel_dir=args["novel_dir"],   to_graph=args["to_graph"], to_res=args["to_res"],
             device=device, nep = nrun, baseset = bstype, novelset = nstype,
             n_way = args["n_way"], k_shot = args["k_shot"], modelname = mtype
             )

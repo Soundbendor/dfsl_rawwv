@@ -37,4 +37,6 @@ k_shot = 4
 baseset="esc50"
 novelset="esc50"
 
-data_dir ='/home/dxk/ds/'
+base_dir ='/home/dxk/ds/ESC-50-master'
+novel_dir ='/home/dxk/ds/ESC-50-master'
+

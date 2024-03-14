@@ -29,13 +29,14 @@ settings = {
         "dropout": 0.2,
         "dropout_final": 0.5,
         "save_ivl": 0,
-        "data_dir": UG.DEF_DATADIR,
+        "base_dir": UG.DEF_BASEDIR,
+        "novel_dir": UG.DEF_NOVELDIR,
         "save_dir": UG.DEF_SAVEDIR,
         "res_dir": UG.DEF_RESDIR,
         "graph_dir": UG.DEF_GRAPHDIR,
         "load_emb": '',
         "load_cls": '',
-        "model_dir": UG.DEF_BASEDIR,
+        "model_dir": UG.DEF_ROOTDIR,
         "omit_last_relu": True,
         "use_prelu": True,
         "se_prelu": False,
@@ -59,7 +60,7 @@ settings = {
 
 def parse_args():
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument("-t", "--toml", type=str, default=os.path.join(UG.DEF_BASEDIR,"default.toml"), help="toml settings file")
+    parser.add_argument("-t", "--toml", type=str, default=os.path.join(UG.DEF_ROOTDIR,"default.toml"), help="toml settings file")
   
     args = parser.parse_args()
     try:
