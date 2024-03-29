@@ -139,7 +139,7 @@ def runner(model, expr_num = 0, train_phase = TrainPhase.base_init, seed=UG.DEF_
         base_tester(model,cur_loss,base_test_data, expr_num= expr_num, bs=bs, num_classes = num_classes_base, res_dir=res_dir, graph_dir = graph_dir, to_print=to_print, to_time=to_time, to_graph=to_graph, to_res=to_res,device=device,pretrain=(train_phase != TrainPhase.base_init), modelname = modelname, baseset = baseset, novelset = novelset, multilabel=multilabel, nep=nep)
 
     if train_phase in [TrainPhase.base_weightgen, TrainPhase.base_trainall, TrainPhase.run_all]:
-        base_weightgen_trainer(model, cur_loss, cur_optim_weightgen, base_train_data, base_valid_data, lr=lr, bs = bs, epochs = weightgen_epochs, save_ivl = save_ivl, save_dir = save_dir, res_dir = res_dir, graph_dir = graph_dir, device = device, expr_num = expr_num, multilabel=multilabel,num_classes = num_classes_base, to_print = to_print, to_time = to_time, to_graph = to_graph, to_res = to_res, rng = rng, n_way = n_way, k_shot = k_shot, modelname = modelname, baseset=baseset, novelset=novelset, nep=nep)
+        base_weightgen_trainer(model, cur_loss, cur_optim_weightgen, base_train_data, base_valid_data, lr=lr, bs = bs, epochs = weightgen_epochs, save_ivl = save_ivl, save_dir = save_dir, res_dir = res_dir, graph_dir = graph_dir, device = device, expr_num = expr_num, multilabel=multilabel,num_classes_base = num_classes_base, to_print = to_print, to_time = to_time, to_graph = to_graph, to_res = to_res, rng = rng, n_way = n_way, k_shot = k_shot, modelname = modelname, baseset=baseset, novelset=novelset, nep=nep)
  
     if train_phase in [TrainPhase.novel_valid, TrainPhase.run_all]:
         novel_tester(model, cur_loss, base_test_data, novel_val_datas, bs = bs, epochs = novel_epochs, res_dir = res_dir, graph_dir = graph_dir, device = device, expr_num = expr_num, to_print = to_print, to_time = to_time, to_graph = to_graph, to_res = to_res, rng = rng, n_way = n_way, k_shot = k_shot, max_num_test=8,  modelname = modelname, baseset = baseset, novelset = novelset, train_phase=TrainPhase.novel_valid, batch_type=BatchType.test, multilabel = multilabel, nep = nep)
@@ -149,11 +149,11 @@ def loss_printer(epoch_idx, batch_idx, cur_loss, loss_type=BatchType.train, to_p
         print(cur_str)
 
 
-def batch_handler(model, dloader_arr, cur_losser, cur_opter=None, batch_type = BatchType.train, train_phase=TrainPhase.base_weightgen, device='cpu', bs=4, epoch_idx=0, num_classes = 50, to_print=True, to_time = False, modelname = ModelName.samplecnn, dsname = DatasetName.esc50, ds_idx = 0, multilabel=True):
+def batch_handler(cur_model, dloader_arr, batch_losser, batch_opter=None, batch_type = BatchType.train, train_phase=TrainPhase.base_weightgen, device='cpu', bs=4, epoch_idx=0, num_classes = 50, to_print=True, to_time = False, modelname = ModelName.samplecnn, dsname = DatasetName.esc50, ds_idx = 0, multilabel=True):
     #time_batch = []
     loss_batch = []
-    curmet = UM.metric_creator(num_classes=num_classes, multilabel=multilabel)
-    #train = not (cur_opter is None)
+    curmet = UM.metric_creator(num_classes=num_classes, multilabel=multilabel, device=device)
+    #train = not (batch_opter is None)
     train = batch_type.name == 'train'
     time_start = -1
     time_last = -1
@@ -161,15 +161,15 @@ def batch_handler(model, dloader_arr, cur_losser, cur_opter=None, batch_type = B
         time_start = time.time()
         #time_last = time_start
     if train == False:
-        model.eval()
+        cur_model.eval()
     else:
-        model.train()
-    #print(f"Before no_grad {model.classifier.cls_vec.requires_grad}")
+        cur_model.train()
+    #print(f"Before no_grad {cur_model.classifier.cls_vec.requires_grad}")
     with (torch.no_grad() if train == False else contextlib.nullcontext()):
         for dloader in dloader_arr:
             for batch_idx, (ci,cl) in enumerate(dloader):
                 #print(ci.shape, cl.shape)
-                pred = model(ci.to(device))
+                pred = cur_model(ci.to(device))
                 #print("--- predicted ---")
                 #print(pred.argmax(dim=1))
                 #print("--- true ---")
@@ -178,15 +178,16 @@ def batch_handler(model, dloader_arr, cur_losser, cur_opter=None, batch_type = B
                 #print(ci.shape)
                 #print(cl.shape)
                 #print(ci,cl)
-                #cur_loss = None
-                #cur_loss = cur_losser(pred, cl.to(torch.float).to(device))
-                cur_loss = cur_losser(pred, cl.to(device))
+                #batch_loss = None
+                #batch_loss = batch_losser(pred, cl.to(torch.float).to(device))
+                batch_loss = batch_losser(pred, cl.to(device))
                 #print(pred.shape)
-                loss_item = cur_loss.item()
+                loss_item = batch_loss.item()
                 if train ==True and train_phase != TrainPhase.base_weightgen:
-                    cur_loss.backward()
-                    cur_opter.step()
-                    cur_opter.zero_grad()
+                    batch_loss.backward()
+                    batch_opter.step()
+                    batch_opter.zero_grad()
+                #print(pred.device, cl.device)
                 UM.metric_updater (curmet, pred, cl)
                 if to_print == True:
                     loss_printer(epoch_idx, batch_idx, loss_item, loss_type=batch_type, to_print = to_print )
@@ -198,11 +199,11 @@ def batch_handler(model, dloader_arr, cur_losser, cur_opter=None, batch_type = B
                     time_last = time_start
                 """
             if train == True and train_phase == TrainPhase.base_weightgen:
-                cur_loss.backward()
-                cur_opter.step()
-                cur_opter.zero_grad()
-            #del cur_loss
-    #print(f"After no_grad {model.classifier.cls_vec.requires_grad}")
+                batch_loss.backward()
+                batch_opter.step()
+                batch_opter.zero_grad()
+            #del batch_loss
+    #print(f"After no_grad {cur_model.classifier.cls_vec.requires_grad}")
     time_avg = -1
     time_batch_overall = -1
     if to_time == True:
@@ -240,12 +241,12 @@ def model_saver(cur_model, save_dir=UG.DEF_SAVEDIR, epoch_idx=0, expr_num = 0, m
 
 def base_tester(model, cur_loss, test_data, bs = 4, res_dir = UG.DEF_RESDIR, graph_dir = UG.DEF_GRAPHDIR, device='cpu', expr_num = 0, num_classes = 30, to_print = True, to_time = True, to_graph = True, to_res = True, pretrain = False, modelname = ModelName.samplecnn, baseset = DatasetName.esc50, novelset = DatasetName.esc50,nep=None, multilabel=False):
     model.set_train_phase(TrainPhase.base_test)
-    test_dload = DataLoader(test_data, shuffle=True, batch_size = bs)
+    test_dload = DataLoader(test_data, shuffle=True, batch_size = bs, generator = torch.Generator(device=device))
 
     confmat_path = ""
     if to_print == True:
         print(f"\n Testing\n ==========================")
-    res_test = batch_handler(model, [test_dload], cur_loss, cur_opter=None, batch_type = BatchType.test, device=device, epoch_idx=-1, bs=bs, num_classes=num_classes, to_print=to_print, to_time = to_time, modelname = modelname, dsname=baseset, ds_idx=0, multilabel=multilabel)
+    res_test = batch_handler(model, [test_dload], cur_loss, batch_opter=None, batch_type = BatchType.test, device=device, epoch_idx=-1, bs=bs, num_classes=num_classes, to_print=to_print, to_time = to_time, modelname = modelname, dsname=baseset, ds_idx=0, multilabel=multilabel)
     if to_res == True:
         UR.res_csv_appender(res_test, dest_dir=res_dir, expr_num = expr_num, epoch_idx=-1, batch_type=BatchType.test, modelname = modelname, baseset = baseset, novelset = novelset, train_phase = TrainPhase.base_init, pretrain=pretrain)
     if to_graph == True:
@@ -307,13 +308,14 @@ def novel_tester(model, cur_loss, base_test_data, novel_test_datas, bs = 4, epoc
                 # save unsampled to set against later
                 cur_unsamp.append(un_tup)
                 cur_subset = Subset(novel_ds, wg_ex)
-                subset_dl = DataLoader(cur_subset, batch_size=k_shot, shuffle=False)
+                subset_dl = DataLoader(cur_subset, batch_size=k_shot, shuffle=False,  generator = torch.Generator(device=device))
                 #print(wg_k, unsampled)
                 #print("for1")
                 for ci,cl in subset_dl:
                     #print("cicl")
                     #print(f"before setting {cl}", model.classifier.cls_vec.shape)
                     #print(model.classifier.cls_vec)
+                    #print(ci.shape)
                     #print("mapped_novel_idx", novel_ds.get_mapped_class_idx(novel_class_idx))
                     model.set_pseudonovel_vec(novel_ds.get_mapped_class_idx(novel_class_idx), ci.to(device))
                     #print(f"after setting {cl}", model.classifier.cls_vec[cl])
@@ -329,14 +331,14 @@ def novel_tester(model, cur_loss, base_test_data, novel_test_datas, bs = 4, epoc
 
             num_total = num_novel + num_base
             test_base_sb = Subset(base_test_data, test_b)
-            test_base_dl = DataLoader(test_base_sb, batch_size=bs, shuffle=True)
+            test_base_dl = DataLoader(test_base_sb, batch_size=bs, shuffle=True,  generator = torch.Generator(device=device))
             #print("model classifier shape", model.classifier.cls_vec.shape)
             # test base ~~~~~~~~~~~~~~~~~~~~~
             base_confmat_path = ""
             if to_print == True:
                 print(f"--- Base Testing for Task {i} ---")
             #print(f"Before Base {model.classifier.cls_vec.requires_grad}")
-            res_base = batch_handler(model, [test_base_dl], cur_loss, cur_opter=None, batch_type = batch_type, device=device, epoch_idx=epoch_idx, train_phase = train_phase, bs=bs, num_classes = num_total, to_print=to_print, to_time = to_time, modelname = modelname, dsname = baseset, ds_idx=epoch_idx, multilabel=multilabel)
+            res_base = batch_handler(model, [test_base_dl], cur_loss, batch_opter=None, batch_type = batch_type, device=device, epoch_idx=epoch_idx, train_phase = train_phase, bs=bs, num_classes = num_total, to_print=to_print, to_time = to_time, modelname = modelname, dsname = baseset, ds_idx=epoch_idx, multilabel=multilabel)
             #print(f"After Base {model.classifier.cls_vec.requires_grad}")
             #res_base_arr.append(res_base)
             if to_res == True:
@@ -368,12 +370,12 @@ def novel_tester(model, cur_loss, base_test_data, novel_test_datas, bs = 4, epoc
                     ds_selected_unsampled = np.append(ds_selected_unsampled, unsampled_samp)
                     # test against current novel dataset
                 test_novel_sb = Subset(novel_test_datas[j][1], ds_selected_unsampled)
-                test_novel_dl = DataLoader(test_novel_sb, batch_size=bs, shuffle=True)
+                test_novel_dl = DataLoader(test_novel_sb, batch_size=bs, shuffle=True,  generator = torch.Generator(device=device))
                 novel_dls.append(test_novel_dl)
             #print("novel_classes_test", novel_unsamp_classes)
             if to_print == True:
                 print(f"--- Novel Testing for Task {i} ---")
-            res_novel = batch_handler(model, novel_dls, cur_loss, cur_opter=None, batch_type = batch_type, device=device, epoch_idx=epoch_idx, train_phase = train_phase, bs=bs, num_classes = num_total, to_print=to_print, to_time = to_time, modelname=modelname, dsname=novelset, ds_idx=epoch_idx, multilabel=multilabel)
+            res_novel = batch_handler(model, novel_dls, cur_loss, batch_opter=None, batch_type = batch_type, device=device, epoch_idx=epoch_idx, train_phase = train_phase, bs=bs, num_classes = num_total, to_print=to_print, to_time = to_time, modelname=modelname, dsname=novelset, ds_idx=epoch_idx, multilabel=multilabel)
 
             novel_confmat_path = ""
             if nep != None:
@@ -401,13 +403,12 @@ def novel_tester(model, cur_loss, base_test_data, novel_test_datas, bs = 4, epoc
 # 1. sample M "pseudo" novel classes from base classes, K per class for weight generator
 # 2. goes into new classification matrix W* = pseudo novel weights (above) + rest of original weights
 # update weight generator AND base classification weight vectors on loss from batch of base + pseudo-novel
-def base_weightgen_trainer(model, cur_loss, cur_optim, train_data, valid_data, lr=1e-4, bs = 4, epochs = 1, save_ivl = 0, save_dir = UG.DEF_SAVEDIR, res_dir = UG.DEF_RESDIR, graph_dir = UG.DEF_GRAPHDIR, device = 'cpu', expr_num = 0, num_classes = 30, to_print = True, to_time = True, to_graph = True, to_res = True, rng = None, n_way = 5, k_shot = 5, total_novel_samp = 100, total_base_samp = 100, modelname = ModelName.samplecnn, baseset=DatasetName.esc50, novelset = DatasetName.esc50, multilabel=True, nep = None):
-    model.set_train_phase(TrainPhase.base_weightgen)
-    model.zero_grad()
-    cur_optim.zero_grad()
+def base_weightgen_trainer(model, cur_loss, cur_optim, train_data, valid_data, lr=1e-4, bs = 4, epochs = 1, save_ivl = 0, save_dir = UG.DEF_SAVEDIR, res_dir = UG.DEF_RESDIR, graph_dir = UG.DEF_GRAPHDIR, device = 'cpu', expr_num = 0, num_classes_base = 30, to_print = True, to_time = True, to_graph = True, to_res = True, rng = None, n_way = 5, k_shot = 5, total_novel_samp = 100, total_base_samp = 100, modelname = ModelName.samplecnn, baseset=DatasetName.esc50, novelset = DatasetName.esc50, multilabel=True, nep = None):
+    cur_tp = TrainPhase.base_weightgen
+    model.set_train_phase(cur_tp)
     #unmapped base class indices
     base_class_idxs = train_data.get_class_idxs()
-
+    num_total = num_classes_base
     # get an idea of how many to sample for the query set
     # this is assuming an even divide between all classes
     novel_ex_per_class = int(total_novel_samp/n_way)
@@ -416,15 +417,21 @@ def base_weightgen_trainer(model, cur_loss, cur_optim, train_data, valid_data, l
     # take the minimum of the two to ensure a fair-ish split
     ex_per_class = min(novel_ex_per_class, base_ex_per_class)
     # number of batches
+    model.zero_grad()
+    cur_optim.zero_grad()
     for epoch_idx in range(epochs):
         # unmapped pseudonovel idxs
+        #model.renum_novel_classes(0, device=device)
         pseudo_novel_class_idxs = rng.choice(base_class_idxs, size=n_way, replace=False)
         pseudo_base_class_idxs = np.setdiff1d(base_class_idxs, pseudo_novel_class_idxs)
+        model.renum_novel_classes(n_way,device=device)
         # mask out class_idxs that are serving as the pseudo-novel classes
         # since the model learned on the mapped index, need to map to mapped idxs
         model.set_exclude_idxs(train_data.get_mapped_class_idxs(pseudo_novel_class_idxs), device=device)
         # collect all examples not used for support set, keep divided per class
         # for the heck of it, should be a tuple of number of examples, and then the actual indices
+        train_data.set_remapped_idx_subset(pseudo_novel_class_idxs)
+        #print(model.classifier.cls_vec_copy.shape)
         unsampled_pseudo_novel_ex_idxs = []
         for pseudo_novel_class_idx in pseudo_novel_class_idxs:
             pseudo_novel_ex_idxs = train_data.get_class_ex_idxs(pseudo_novel_class_idx)
@@ -434,10 +441,15 @@ def base_weightgen_trainer(model, cur_loss, cur_optim, train_data, valid_data, l
 
             unsampled_pseudo_novel_ex_idxs.append((cur_num_unsampled, unsampled_pseudo_novel_ex))
             pseudo_novel_support_subset = Subset(train_data, pseudo_novel_ex_support)
-            pseudo_novel_support_dl = DataLoader(pseudo_novel_support_subset, batch_size=k_shot, shuffle=False)
+            #print(pseudo_novel_support_subset.dataset, pseudo_novel_support_subset.indices)
+            pseudo_novel_support_dl = DataLoader(pseudo_novel_support_subset, batch_size=k_shot, shuffle=False,  generator = torch.Generator(device=device))
+            #print(dir(pseudo_novel_support_dl))
             for support_examples,support_labels in pseudo_novel_support_dl:
                 # needs to be mapped because model was trained on mapped class idxs
-                model.set_pseudonovel_vec(train_data.get_mapped_class_idx(pseudo_novel_class_idx), support_examples.to(device))
+                #print(support_examples.shape)
+                new_idx = train_data.get_mapped_class_idx(pseudo_novel_class_idx) 
+                #print("new_idx", new_idx, "support_labels", support_labels)
+                model.set_pseudonovel_vec(new_idx, support_examples.to(device))
         num_pseudo_novel_unsampled_per_class = [num for (num,idxs) in unsampled_pseudo_novel_ex_idxs]
         # get min of num sampled and also the min of the "even" divide per class
         number_to_sample = min(np.min(num_pseudo_novel_unsampled_per_class), ex_per_class)
@@ -452,18 +464,18 @@ def base_weightgen_trainer(model, cur_loss, cur_optim, train_data, valid_data, l
             pseudo_base_ex_query = rng.choice(pseudo_base_ex_idxs, size=number_to_sample, replace=False)
             query_idxs = np.hstack((query_idxs, pseudo_base_ex_query))
         query_set = Subset(train_data, query_idxs)
-        query_dl = DataLoader(query_set, batch_size=bs, shuffle=True)
+        query_dl = DataLoader(query_set, batch_size=bs, shuffle=True,  generator = torch.Generator(device=device))
         model.weightgen_train_enable(True)
         if to_print == True:
             print(f"\nEpoch {epoch_idx}\n ==========================")
-        res_wgen = batch_handler(model, [query_dl], cur_loss, cur_opter=cur_optim, batch_type = BatchType.train, device=device, epoch_idx=epoch_idx, train_phase = TrainPhase.base_weightgen, bs=bs, num_classes = num_classes, to_print=to_print, to_time = to_time, modelname=modelname, dsname = baseset, multilabel=multilabel)
+        res_wgen = batch_handler(model, [query_dl], cur_loss, batch_opter=cur_optim, batch_type = cur_tp, device=device, epoch_idx=epoch_idx, train_phase = TrainPhase.base_weightgen, bs=bs, num_classes = num_classes_base + n_way, to_print=to_print, to_time = to_time, modelname=modelname, dsname = baseset, multilabel=multilabel)
         #print("got to here")
         if to_res == True:
             UR.res_csv_appender(res_wgen, dest_dir=res_dir, expr_num = expr_num, epoch_idx=epoch_idx, batch_type=BatchType.train, train_phase = TrainPhase.base_weightgen, baseset=baseset, novelset = novelset )
 
         if nep != None:
             UN.nep_batch_parser(nep, res_wgen,batch_type=BatchType.train, train_phase = TrainPhase.base_weightgen, ds_type = DatasetType.base, modelname=modelname, dsname=baseset, ds_idx=0)
-        #res_valid = batch_handler(model, [valid_dload], cur_loss, cur_opter=None, batch_type = BatchType.valid, device=device, epoch_idx=epoch_idx, bs=bs, to_print=to_print, to_time = to_time, num_classes = num_classes, modelname=modelname, dsname=baseset, multilabel=multilabel)
+        #res_valid = batch_handler(model, [valid_dload], cur_loss, batch_opter=None, batch_type = BatchType.valid, device=device, epoch_idx=epoch_idx, bs=bs, to_print=to_print, to_time = to_time, num_classes_base = num_classes_base, modelname=modelname, dsname=baseset, multilabel=multilabel)
         """
         if to_res == True:
             UR.res_csv_appender(res_valid, dest_dir=res_dir, expr_num = expr_num, epoch_idx=epoch_idx, batch_type=BatchType.valid, modelname=modelname, train_phase = TrainPhase.base_weightgen, baseset = baseset, novelset = novelset, pretrain = False)
@@ -475,7 +487,11 @@ def base_weightgen_trainer(model, cur_loss, cur_optim, train_data, valid_data, l
         """
         # ~~~ end of loop save stuff ~~~
         model.weightgen_train_enable(False)
+        model.zero_grad()
+        cur_optim.zero_grad()
+        #model.renum_novel_classes(0, device=device)
         model.reset_copies(copy_back=True,device=device)
+        train_data.unset_remapped_idx_subset()
         if save_ivl > 0:
             if ((epoch_idx +1) % save_ivl == 0 and epoch_idx != 0) or epoch_idx == (epochs-1):
                 #model_saver(model, save_dir=save_dir, epoch_idx=epoch_idx, expr_num=expr_num, modelname = modelname, baseset = baseset, novelset = novelset, model_idx = 1, mtype="embedder")
@@ -493,15 +509,15 @@ def base_weightgen_trainer(model, cur_loss, cur_optim, train_data, valid_data, l
     
 def base_init_trainer(model, cur_loss, cur_optim, train_data, valid_data, lr=1e-4, bs = 4, epochs = 1, save_ivl=0, save_dir=UG.DEF_SAVEDIR, res_dir = UG.DEF_RESDIR, graph_dir = UG.DEF_GRAPHDIR, device='cpu', expr_num = 0, num_classes = 30, to_print = True, to_time = True, to_graph = True, to_res = True, modelname = ModelName.samplecnn, baseset = DatasetName.esc50, novelset = DatasetName.esc50, multilabel=True, nep=None):
     model.set_train_phase(TrainPhase.base_init)
-    train_dload = DataLoader(train_data, shuffle=True, batch_size = bs)
-    valid_dload = DataLoader(valid_data, shuffle=True, batch_size = bs)
+    train_dload = DataLoader(train_data, shuffle=True, batch_size = bs,  generator = torch.Generator(device=device))
+    valid_dload = DataLoader(valid_data, shuffle=True, batch_size = bs,  generator = torch.Generator(device=device))
     #model.classifier.set_base_class_idxs(train_data.get_class_idxs())
     res_train_batches = []
     res_valid_batches = []
     for epoch_idx in range(epochs):
         if to_print == True:
             print(f"\nEpoch {epoch_idx}\n ==========================")
-        res_train = batch_handler(model, [train_dload], cur_loss, cur_opter=cur_optim, batch_type = BatchType.train, device=device, train_phase=TrainPhase.base_init, epoch_idx=epoch_idx, bs=bs, num_classes= num_classes, to_print=to_print, to_time = to_time, modelname=modelname, dsname=baseset, multilabel=multilabel)
+        res_train = batch_handler(model, [train_dload], cur_loss, batch_opter=cur_optim, batch_type = BatchType.train, device=device, train_phase=TrainPhase.base_init, epoch_idx=epoch_idx, bs=bs, num_classes= num_classes, to_print=to_print, to_time = to_time, modelname=modelname, dsname=baseset, multilabel=multilabel)
         if to_res == True:
             UR.res_csv_appender(res_train, dest_dir=res_dir, expr_num = expr_num, epoch_idx=epoch_idx, batch_type=BatchType.train, modelname = modelname, baseset = baseset, novelset = novelset)
         if save_ivl > 0:
@@ -511,7 +527,7 @@ def base_init_trainer(model, cur_loss, cur_optim, train_data, valid_data, lr=1e-
 
         if nep != None:
             UN.nep_batch_parser(nep, res_train,batch_type=BatchType.train, train_phase = TrainPhase.base_init, ds_type = DatasetType.base, modelname=modelname, dsname=baseset, ds_idx=0)
-        res_valid = batch_handler(model, [valid_dload], cur_loss, cur_opter=None, batch_type = BatchType.valid, device=device, train_phase=TrainPhase.base_init, epoch_idx=epoch_idx, bs=bs, to_print=to_print, to_time = to_time, multilabel=multilabel, modelname=modelname, dsname=baseset, num_classes = num_classes)
+        res_valid = batch_handler(model, [valid_dload], cur_loss, batch_opter=None, batch_type = BatchType.valid, device=device, train_phase=TrainPhase.base_init, epoch_idx=epoch_idx, bs=bs, to_print=to_print, to_time = to_time, multilabel=multilabel, modelname=modelname, dsname=baseset, num_classes = num_classes)
         if to_res == True:
             UR.res_csv_appender(res_valid, dest_dir=res_dir, expr_num = expr_num, epoch_idx=epoch_idx, batch_type=BatchType.valid, train_phase =TrainPhase.base_init, modelname=modelname, baseset = baseset, novelset = novelset, pretrain = False)
         res_train_batches.append(res_train)
@@ -526,7 +542,7 @@ def base_init_trainer(model, cur_loss, cur_optim, train_data, valid_data, lr=1e-
 
 if __name__ == "__main__":
     expr_num = int(time.time() * 1000)
-    args = UP.parse_args()
+    args = UP.settings
     #print(args)
     make_folder(args["save_ivl"] > 0, args["save_dir"]) 
     make_folder(args["to_graph"], args["graph_dir"]) 
@@ -561,19 +577,21 @@ if __name__ == "__main__":
     t_ph = TrainPhase[args["train_phase"]]
     #max_samp = 118098
     max_samp = 177147
-
-    if torch.cuda.is_available() == True:
+    
+    print(torch.cuda.is_available(), args['use_cuda'])
+    if torch.cuda.is_available() == True and args["use_cuda"] == True:
         device = 'cuda'
         torch.cuda.empty_cache()
+        torch.set_default_device(device)
 
     model = None
     mtype = ModelName[args["model"]]
     if args["model"] == "samplecnn":
-        model = SampCNNModel(in_ch=1, strided_list=strided_list, basic_list=[], res1_list=res1_list, res2_list=res2_list, se_list=se_list, rese1_list=[], rese2_list=rese2_list, simple_list=simple_list, se_dropout=args["se_dropout"], res1_dropout=args["res1_dropout"], res2_dropout=args["res2_dropout"], rese1_dropout=args["rese1_dropout"], rese2_dropout=args["rese2_dropout"],simple_dropout=args["simple_dropout"], se_fc_alpha=args["se_fc_alpha"], rese1_fc_alpha=args["rese1_fc_alpha"], rese2_fc_alpha=args["rese2_fc_alpha"], num_classes_base=num_classes_base, num_classes_novel = 0, sr=args["sample_rate"], omit_last_relu = args["omit_last_relu"], use_prelu = args["use_prelu"], se_prelu=args["se_prelu"], cls_fn = args["cls_fn"]).to(device)
+        model = SampCNNModel(in_ch=1, strided_list=strided_list, basic_list=[], res1_list=res1_list, res2_list=res2_list, se_list=se_list, rese1_list=[], rese2_list=rese2_list, simple_list=simple_list, se_dropout=args["se_dropout"], res1_dropout=args["res1_dropout"], res2_dropout=args["res2_dropout"], rese1_dropout=args["rese1_dropout"], rese2_dropout=args["rese2_dropout"],simple_dropout=args["simple_dropout"], se_fc_alpha=args["se_fc_alpha"], rese1_fc_alpha=args["rese1_fc_alpha"], rese2_fc_alpha=args["rese2_fc_alpha"], num_classes_base=num_classes_base, num_classes_novel = 0, sr=args["sample_rate"], omit_last_relu = args["omit_last_relu"], use_prelu = args["use_prelu"], se_prelu=args["se_prelu"], cls_fn_type = args["cls_fn"]).to(device)
     else:
         
         mtype = ModelName.cnn14
-        model = CNN14Model(in_ch=1, num_classes_base=num_classes_base, num_classes_novel=0, sr=args["sample_rate"], dropout = args["dropout"], dropout_final = args["dropout_final"], seed=3, omit_last_relu = args["omit_last_relu"], train_phase = t_ph, use_prelu = args["use_prelu"], use_bias = args["use_bias"], cls_fn = args["cls_fn"]).to(device)
+        model = CNN14Model(in_ch=1, num_classes_base=num_classes_base, num_classes_novel=0, sr=args["sample_rate"], dropout = args["dropout"], dropout_final = args["dropout_final"], seed=3, omit_last_relu = args["omit_last_relu"], train_phase = t_ph, use_prelu = args["use_prelu"], use_bias = args["use_bias"], cls_fn_type = args["cls_fn"]).to(device)
 
     #save_str=f"{expr_num}-{modelname.name}-{dsname.name}_{mtype}_{epoch_idx}-model.pth"
     modelname = args["model"]

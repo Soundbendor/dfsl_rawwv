@@ -11,7 +11,7 @@ from util.types import BatchType,TrainPhase
 # (2) Gidaris, S. and Komodakis, N. (2018). Dynamic Few-Shot Visual Learning Without Forgetting. In Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR) 2018, (pp. 4367-4375). https://openaccess.thecvf.com/content_cvpr_2018/html/Gidaris_Dynamic_Few-Shot_Visual_CVPR_2018_paper.html.
 # (3) Gidaris, S. (2019). FewShotWithoutForgetting [Github Repository]. Github. https://github.com/gidariss/FewShotWithoutForgetting/ 
 class WeightGenCls(nn.Module):
-    def __init__(self, num_classes_base = 30, num_classes_novel = 0, dim=512, seed=3, exclude_idxs = [], train_phase=TrainPhase.base_init, cls_fn = 'cos_sim'):
+    def __init__(self, num_classes_base = 30, num_classes_novel = 0, dim=512, seed=3, exclude_idxs = [], train_phase=TrainPhase.base_init, cls_fn_type = 'cos_sim'):
         super().__init__()
         torch.manual_seed(seed)
 
@@ -21,14 +21,19 @@ class WeightGenCls(nn.Module):
         self.dim = dim
         #self.base_classes = base_idxs
         self.sdev = torch.sqrt(torch.tensor(2.0/dim)) # from (3)
-        self.sdev.requires_grad_(False)
+        #self.sdev.requires_grad_(False)
 
         cls_vec = torch.randn(num_classes_base,dim) * self.sdev # from(3)
         #cls_vec = torch.zeros(num_classes_base,dim)
         #self.cls_vec = Parameter(nn.init.xavier_normal_(cls_vec)) # idea from (3)
         self.cls_vec = Parameter(cls_vec) # idea from (3)
+        #self.cls_vec_novel = torch.randn(num_classes,novel,dim) * self.sdev
+
+        # separating out base and novel classes like gidaris
+        self.cls_vec_novel = torch.zeros(num_classes_novel,dim, requires_grad=False)
+        self.cls_vec_novel.requires_grad_(False)
         #from (2)
-        self.cls_fn = 'cos_sim'
+        self.cls_fn_type = 'cos_sim'
         tau = torch.tensor(10.)
         gamma = torch.tensor(10.)
         self.tau = Parameter(tau)
@@ -38,19 +43,26 @@ class WeightGenCls(nn.Module):
         self.phi_q = Parameter(nn.init.xavier_normal_(torch.zeros(dim,dim))) #idea from (3)ish
         k_b = torch.randn(num_classes_base, dim) * self.sdev # copying init of cls_vec idea from (3)
         self.k_b = Parameter(k_b)
-        self.include_idxs = []
-        self.exclude_idxs = []
+        self.include_idxs = np.array([])
+        self.exclude_idxs = np.array([])
         self.k_b.requires_grad_(False)
         self.phi_avg.requires_grad_(False)
         self.phi_att.requires_grad_(False)
         self.phi_q.requires_grad_(False)
         self.attn_smax = nn.Softmax(dim=1) #used to take attention over softmax for weight gen
+        self.cls_mask = torch.tensor([])
+        self.cls_mask.requires_grad_(False)
+        #print(self.cls_vec.device, self.cls_vec_novel.device)
+        if self.cls_fn_type == 'cos_sim':
+            self.cls_fn = self.cos_sim
+        else:
+            self.cls_fn = self.rev_euc
 
     def set_train_phase(self, cur_tph):
         self.train_phase = cur_tph
         
     def clear_exclude_idxs(self):
-        self.exclude_idxs.clear()
+        self.exclude_idxs = np.array([])
 
     def cos_sim(self, ipt1, ipt2):
         ret = torch.matmul(nn.functional.normalize(ipt1,dim=1), nn.functional.normalize(ipt2, dim=1).T)
@@ -61,19 +73,23 @@ class WeightGenCls(nn.Module):
         #sorted(self.include_idxs)
 
     def set_exclude_idxs(self, exclude_idxs, device='cpu'):
-        self.exclude_idxs = exclude_idxs
+        self.exclude_idxs = np.array(exclude_idxs)
+        self.cls_vec_novel.detach()
+        #self.cls_vec_novel.requires_grad_(False)
+        #print(self.exclude_idxs)
         try:
             del self.cls_vec_copy
             del self.cls_vec_pseudo
-            del self.k_b_copy
+            #del self.k_b_copy
         except:
             pass
-        self.cls_vec_copy = Parameter(self.cls_vec.clone().detach()).to(device)
-        self.cls_vec_copy.requires_grad_(False)
-        self.cls_vec_copy[exclude_idxs] = 0.
+        self.calc_mask(self.cls_vec)
+        cls_vec_copy = Parameter(self.cls_vec.clone().detach()).to(device)
+        cls_vec_copy.requires_grad_(False)
+        self.cls_vec_copy = self.apply_mask(cls_vec_copy)
         self.cls_vec_pseudo = self.cls_vec_copy.clone().detach()
         self.cls_vec_pseudo.requires_grad_(False)
-        #self.cls_vec_copy.requires_grad_(True)
+        self.cls_vec_copy.requires_grad_(True)
 
         #self.k_b_copy = self.k_b.clone().detach()
         #self.k_b_copy[exclude_idxs] = 0.
@@ -90,7 +106,7 @@ class WeightGenCls(nn.Module):
                 idxs_to_set = np.setdiff1d(np.arange(0,cur_sz,1), self.exclude_idxs)
                 self.cls_vec[idxs_to_set,:] = self.cls_vec_copy[idxs_to_set,:]
                 self.cls_vec.requires_grad_(True)
-        self.exclude_idxs = []
+        self.exclude_idxs = np.array([])
         try:
             del self.cls_vec_copy
             del self.cls_vec_pseudo
@@ -108,26 +124,22 @@ class WeightGenCls(nn.Module):
         #self.k_b.requires_grad_(True)
 
 
+
     # change number of classification vector slots
     def renum_novel_classes(self, num_novel_classes,device='cpu'):
-        grad_was_true = self.cls_vec.requires_grad
-        if grad_was_true == True:
-            self.cls_vec.requires_grad_(False)
+        #if grad_was_true == True:
+        #    self.cls_vec.requires_grad_(False)
         novel_clip_num = max(0, num_novel_classes)
         #print("novel_clip_num", novel_clip_num)
-        resize_num = novel_clip_num +self.num_classes_base
-        old_num = self.num_classes_base + self.num_classes_novel
-        #print(self.num_classes_base, self.num_classes_novel, old_num, resize_num)
-        if resize_num != old_num:
-            num_to_copy = min(old_num, resize_num)
-            #print("num_to_copy", num_to_copy)
-            cls_vec_new = torch.randn(resize_num, self.dim).to(device) * self.sdev 
-            cls_vec_new.requires_grad_(False)
-            cls_vec_new[:num_to_copy,:] = self.cls_vec[:num_to_copy,:]
-            self.cls_vec = Parameter(cls_vec_new, requires_grad=grad_was_true)
-            if grad_was_true == True:
-                self.cls_vec.requires_grad_(True)
+        old_num = self.num_classes_novel
+        #print(old_num,novel_clip_num)
+        if novel_clip_num != old_num:
+            self.cls_vec_novel.detach()
+            self.cls_vec_novel.requires_grad_(False)
+            self.cls_vec_novel.resize_(novel_clip_num, self.dim)
             self.num_classes_novel = novel_clip_num
+            self.cls_vec_novel.requires_grad_(True)
+        #print(resize_num)
         return novel_clip_num
         
         
@@ -138,12 +150,12 @@ class WeightGenCls(nn.Module):
         cur_mask = torch.ones_like(to_mask, requires_grad = False)
         if len(self.include_idxs) > 0:
             cur_mask[self.include_idxs] = 1.
-        if len(self.exclude_idxs) > 0:
+        if self.exclude_idxs.shape[0] > 0:
             cur_mask[self.exclude_idxs] = 0.
-        return cur_mask
+        self.cls_mask = cur_mask
 
-    def apply_mask(self, to_mask, cur_mask):
-        ret = torch.mul(to_mask, cur_mask)
+    def apply_mask(self, to_mask):
+        ret = torch.mul(to_mask, self.cls_mask)
         return ret
 
 
@@ -159,7 +171,7 @@ class WeightGenCls(nn.Module):
         # each row sums over base classes for each k shot input
         if self.train_phase == TrainPhase.base_weightgen:
             # use the hacky pseudo copy of base vectors
-            attended = torch.matmul(cur_smax, self.cls_vec_pseudo)
+            attended = torch.matmul(cur_smax, self.cls_vec_pseudo[:self.num_classes_base])
         else:
             # just use the normal base classifier vectors since no training
             attended = torch.matmul(cur_smax, self.cls_vec[:self.num_classes_base])
@@ -168,7 +180,9 @@ class WeightGenCls(nn.Module):
 
     def calc_w_n_plus_1(self, z_arr):
         z_avg = torch.mean(z_arr, dim=0)
+        #print("calcing w_att")
         w_att = self.calc_w_att(z_arr)
+        #print("doing mul")
         cur_wn = torch.mul(self.phi_avg, z_avg) + torch.mul(self.phi_att, w_att)
         return cur_wn
         
@@ -179,12 +193,13 @@ class WeightGenCls(nn.Module):
         #self.phi_q = Parameter(nn.init.xavier_normal_(torch.zeros(dim,dim))) #idea from (3)ish
         #k_b = torch.randn(num_classes_base, dim) * self.sdev # copying init of cls_vec idea from (3)
         #self.k_b = Parameter(k_b)
+        #print("calling")
         cur_wn = self.calc_w_n_plus_1(k_novel_ft)
-
-        if self.train_phase == TrainPhase.base_weightgen:
-            self.cls_vec_copy[k_novel_idx] = cur_wn
-        else:
-            self.cls_vec[k_novel_idx] = cur_wn
+        #if self.train_phase == TrainPhase.base_weightgen:
+        #self.cls_vec_novel.detach()
+        #self.cls_vec_novel.requires_grad_(False)
+        with torch.no_grad():
+            self.cls_vec_novel[k_novel_idx - self.num_classes_base] = cur_wn
 
    
     def print_cls_vec_norms(self):
@@ -212,15 +227,17 @@ class WeightGenCls(nn.Module):
         self.phi_avg.requires_grad_(to_enable)
         self.phi_att.requires_grad_(to_enable)
         self.phi_q.requires_grad_(to_enable)
-        try:
-            self.cls_vec_copy.requires_grad_(to_enable)
-        except:
-            pass
+        #try:
+        self.cls_vec_copy.requires_grad_(to_enable)
+        #self.cls_vec_novel.requires_grad_(to_enable)
+        #except:
+        #print('cannot enable cls vec training')
+        #pass
 
 
     def calc_pseudonovel_vecs(self, zarrs, zavgs, zclasses, watt):
         for i in range(zarrs.shape[0]):
-            self.cls_vec_copy[zclasses[i]] = self.calc_w_n_plus_1_2(zarrs[i], zavgs[i], watt[i])
+            self.cls_vec_novel[zclasses[i]- self.num_classes_base]  = self.calc_w_n_plus_1_2(zarrs[i], zavgs[i], watt[i])
 
     def rev_euc_dist(self, ipt, cls_vec):
         # cdist (b,p,m) x (b,r,m) = (b,p,r)
@@ -239,37 +256,27 @@ class WeightGenCls(nn.Module):
         for i,cur_idx in enumerate(k_novel_idxs):
             cur_sz = k_novel_sz[i]
             cur_wn = self.calc_w_n_plus_1(k_novel_fts[last_sz:cur_sz])
-            self.cls_vec_copy[cur_idx] = cur_wn
+            self.cls_vec_novel[cur_idx - self.num_classes_base] = cur_wn
             last_sz = cur_sz
+
 
     def forward(self, ipt):
         # input should be (bs, num_channels)
         # return classifier cosine similarity scores
+        ret_base = None
         ret = None
-        if self.train_phase == TrainPhase.base_init:
-        #idea from (3)
+        if self.train_phase != TrainPhase.base_weightgen:
             #cur_mask = self.calc_mask(self.cls_vec)
-            if self.cls_fn == 'cos_sim':
-                #ret = self.tau * self.cos_sim(ipt,self.apply_mask(self.cls_vec, cur_mask))
-                ret = self.tau * self.cos_sim(ipt, self.cls_vec)
-            else:
-                #ret = self.rev_euc_dist(ipt,self.apply_mask(self.cls_vec, cur_mask))
-                ret = self.rev_euc_dist(ipt,self.cls_vec)
-            #ret = self.cos_sim(ipt,self.apply_mask(self.cls_vec, cur_mask))
-        elif self.train_phase == TrainPhase.base_weightgen:
-            if self.cls_fn == 'cos_sim':
-                ret = self.tau * self.cos_sim(ipt,self.cls_vec_copy)
-            else:
-                ret = self.rev_euc_dist(ipt,self.cls_vec_copy)
-            #ret = self.cos_sim(ipt,self.cls_vec_copy)
+            ret_base = self.tau * self.cls_fn(ipt, self.cls_vec)
         else:
-            if self.cls_fn == 'cos_sim':
-                ret = self.tau * self.cos_sim(ipt, self.cls_vec)
-                #print(ret)
-            else:
+            ret_base = self.tau * self.cls_fn(ipt,self.cls_vec_copy)
 
-                ret = self.rev_euc_dist(ipt,self.cls_vec)
-            #ret = self.cos_sim(ipt, self.cls_vec)
-        #print(ret)
+        if self.num_classes_novel > 0:
+            with torch.no_grad():
+                ret_novel = self.cls_fn(ipt, self.cls_vec_novel)
+            ret = torch.hstack((ret_base, ret_novel))
+            #print(self.num_classes_novel)
+        else:
+            ret = ret_base
         return ret
         # should be (bs, num_channels) x (num_channels, num_classes_base) = (bs, num_classes_base)

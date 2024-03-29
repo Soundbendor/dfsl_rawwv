@@ -53,22 +53,22 @@ settings = {
         "cls_idx": 0,
         "train_phase": 'base_init',
         "n_way": 5,
+        "use_cuda": True,
         "k_shot": 4,
         "baseset":"esc50",
         "novelset": "esc50",
         }
 
-def parse_args():
-    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument("-t", "--toml", type=str, default=os.path.join(UG.DEF_ROOTDIR,"default.toml"), help="toml settings file")
-  
-    args = parser.parse_args()
-    try:
-        with open(args.toml, "rb") as f:
-            cur_settings = tomllib.load(f)
-            settings.update(cur_settings)
-            print(f"read {args.toml}")
-    except:
-        print(f"error reading {args.toml}")
-        quit()
-    return settings
+parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+parser.add_argument("-t", "--toml", type=str, default=os.path.join(UG.DEF_ROOTDIR,"default.toml"), help="toml settings file")
+
+args = parser.parse_args()
+try:
+    with open(args.toml, "rb") as f:
+        cur_settings = tomllib.load(f)
+        #print("got here")
+        settings.update(cur_settings)
+        print(f"read {args.toml}")
+except:
+    print(f"error reading {args.toml}")
+    quit()

@@ -79,7 +79,7 @@ def plot_confmat(confmat,dest_dir="graph", confmat2 = None, train_phase = TrainP
         confmat_show = confmat
         if confmat2 != None:
             confmat_show = confmat + confmat2
-        cur=ax.imshow(confmat_show,cmap='BuPu')
+        cur=ax.imshow(confmat_show.cpu(),cmap='BuPu')
         row=confmat.shape[0]
         majorstep = 10
         minorstep=1

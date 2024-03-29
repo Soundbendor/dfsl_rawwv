@@ -32,11 +32,14 @@ baseset="esc50"
 novelset="esc50"
 n_way = 5
 k_shot = 4
-data_dir ='/home/dxk/ds/'
 
 emb_load_num = 29
-cls_load_num = 5999
-expr_num = 1710315384194
+cls_load_num = 499
+expr_num = 1711699873485
 emb_idx = 0
 cls_idx = 1
 model_dir ='/media/dxk/tosh_ext/fscil/dfsl_rawwv/save'
+
+save_dir = '/media/dxk/tosh_ext/fscil/dfsl_rawwv/save'
+base_dir ='/home/dxk/ds/ESC-50-master'
+novel_dir ='/home/dxk/ds/ESC-50-master'

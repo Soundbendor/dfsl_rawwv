@@ -13,6 +13,7 @@ from .weight_gen_cls import WeightGenCls
 import os,sys
 sys.path.insert(0, os.path.dirname(os.path.split(__file__)[0]))
 from util.types import BatchType,TrainPhase
+import torchviz
 
 #REFERENCES:
 # (1) Kim, T. (2019) sampleaudio [Github Repository]. Github. https://github.com/tae-jun/sampleaudio/
@@ -33,7 +34,7 @@ from util.types import BatchType,TrainPhase
 
 
 class SampCNNModel(nn.Module):
-    def __init__(self, in_ch=1, strided_list=[], basic_list=[], res1_list=[], res2_list=[], se_list=[], rese1_list=[], rese2_list=[], simple_list=[], se_dropout=0.2, res1_dropout=0.2, res2_dropout=0.2, rese1_dropout=0.2, rese2_dropout=0.2,simple_dropout=0.5, se_fc_alpha=2.**(-3), rese1_fc_alpha=2.**(-3), rese2_fc_alpha=2.**(-3), num_classes_base=10, num_classes_novel=0, sr=44100, seed=3, omit_last_relu = True, train_phase = TrainPhase.base_init, use_prelu = True, se_prelu = False, cls_fn = 'cos_sim'):
+    def __init__(self, in_ch=1, strided_list=[], basic_list=[], res1_list=[], res2_list=[], se_list=[], rese1_list=[], rese2_list=[], simple_list=[], se_dropout=0.2, res1_dropout=0.2, res2_dropout=0.2, rese1_dropout=0.2, rese2_dropout=0.2,simple_dropout=0.5, se_fc_alpha=2.**(-3), rese1_fc_alpha=2.**(-3), rese2_fc_alpha=2.**(-3), num_classes_base=10, num_classes_novel=0, sr=44100, seed=3, omit_last_relu = True, train_phase = TrainPhase.base_init, use_prelu = True, se_prelu = False, cls_fn_type = 'cos_sim', device='cpu'):
         """
         EMBEDDER Layers (stored in self.embedder)
         strided_list: tuples of (num, ksize, out_channels, stride)
@@ -174,7 +175,9 @@ class SampCNNModel(nn.Module):
         # output of embedder should be (n, prev_ch, 1)
         # middle dim according to (1) is same as num channels
         
-        self.classifier = WeightGenCls(num_classes_base = num_classes_base, num_classes_novel = num_classes_novel, dim=prev_ch, seed=seed, train_phase=train_phase, cls_fn=cls_fn)
+        self.classifier = WeightGenCls(num_classes_base = num_classes_base, num_classes_novel = num_classes_novel, dim=prev_ch, seed=seed, train_phase=train_phase, cls_fn_type=cls_fn_type).to(device)
+
+        self.has_saved = False
         """
         self.classifier = nn.Sequential()
         if use_classifier == True:
@@ -261,6 +264,11 @@ class SampCNNModel(nn.Module):
         flat_out = self.flatten(emb_out)
         #print(flat_out.shape)
         net_out = self.classifier(flat_out)
+        """
+        if self.has_saved == False:
+            torchviz.make_dot(net_out.mean(), params=dict(self.named_parameters())).render(directory=os.path.split(__file__)[0], view=True)
+            self.has_saved = True
+        """
         return net_out
         #print(emb_out.shape)
 

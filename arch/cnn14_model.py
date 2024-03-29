@@ -17,7 +17,7 @@ from util.types import BatchType,TrainPhase
 # (2) Kong, Q., Cao, Y., Iqbal, T., Wang, Y., Wang, W., and Plumbley, M. D. (2020). PANNs: Large-Scale Pretrained Audio Neural Networks for Audio Pattern Recognition. IEEE/ACM Transiations on Audio, Speech, and Language Processing, Vol. 2. doi: 10.1109/TASLP.2020.3030497
 # (3) torchaudio.transforms._transforms https://pytorch.org/audio/stable/_modules/torchaudio/transforms/_transforms.html#MFCC
 class CNN14Model(nn.Module):
-    def __init__(self, in_ch=1, num_classes_base=10, num_classes_novel = 0, sr=16000, seed=3, omit_last_relu = True, dropout = 0.2, dropout_final = 0.5, train_phase = TrainPhase.base_init, use_prelu = False, use_bias = False, cls_fn = 'cos_sim'):
+    def __init__(self, in_ch=1, num_classes_base=10, num_classes_novel = 0, sr=16000, seed=3, omit_last_relu = True, dropout = 0.2, dropout_final = 0.5, train_phase = TrainPhase.base_init, use_prelu = False, use_bias = False, cls_fn_type = 'cos_sim',device='cpu'):
         super().__init__()
         self.in_ch = in_ch
         self.num_classes_base = num_classes_base
@@ -53,7 +53,7 @@ class CNN14Model(nn.Module):
             prev_ch = out_ch
 
         self.last_dropout = nn.Dropout(p=dropout_final)
-        self.classifier = WeightGenCls(num_classes_base = num_classes_base, num_classes_novel = num_classes_novel, dim=out_ch, seed=seed, train_phase=train_phase, cls_fn=cls_fn)
+        self.classifier = WeightGenCls(num_classes_base = num_classes_base, num_classes_novel = num_classes_novel, dim=out_ch, seed=seed, train_phase=train_phase, cls_fn_type=cls_fn_type).to(device)
  
     def freeze_embedder(self,to_freeze):
         self.embedder.requires_grad_(to_freeze==False)

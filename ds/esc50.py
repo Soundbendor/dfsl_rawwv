@@ -44,14 +44,35 @@ class ESC50(Dataset):
         #print(self.dfsub)
         self.samp_sz = samp_sz
         self.shape = self.dfsub.shape
-         
+        # remapping a subset of indices to a new set with new offset (for base weightgen training)
+        self.subset_remapped_idxs = set([])
+        self.subset_is_remapped = False
+        self.subset_num_remapped = 0 
+
     def __len__(self):
         return self.shape[0]
 
     # unmapped idxs
     def get_class_idxs(self):
         return self.classes
-    
+   
+   # given a set of unmapped indices, map them to a new set of indices with offset
+    def set_remapped_idx_subset(self, idx_subset):
+        self.subset_is_remapped = True
+        self.subset_remapped_idxs = set(idx_subset)
+        self.subset_label_tx = SKP.LabelEncoder()
+        self.subset_label_tx.fit(idx_subset)
+        self.subset_label_offset = self.num_classes + self.label_offset
+        self.subset_num_remapped = len(idx_subset)
+
+    # unset mapping 
+    def unset_remapped_idx_subset(self):
+        self.subset_num_remapped = 0 
+        del self.subset_label_tx
+        self.subset_mapped_idxs = set([])
+        self.subset_is_remapped = False
+
+
     #unmapped idxs
     def get_class_ex_idxs(self, class_idx):
         return self.dfsub.where(self.dfsub["target"] == class_idx).dropna().index
@@ -59,14 +80,34 @@ class ESC50(Dataset):
     def get_mapped_class_idxs(self, c_idxs):
         ret_idxs = c_idxs
         if self.to_label_tx == True:
-            ret_idxs = self.label_tx.transform(c_idxs) + self.label_offset
+            if self.subset_is_remapped == False:
+                ret_idxs = self.label_tx.transform(c_idxs) + self.label_offset
+            # mapping subset is activated, check if is in mapped subset or not and act accordingly
+            else:
+                ret_idxs = []
+                for cur_class in c_idxs:
+                    cur_ret_idx = 0
+                    if cur_class not in self.subset_remapped_idxs:
+                        cur_ret_idx = self.label_tx.transform([cur_class])[0] + self.label_offset
+                    else:
+                        cur_ret_idx = self.subset_label_tx.transform([cur_class])[0] + self.subset_label_offset
+                    ret_idxs.append(cur_ret_idx)
+        #print(ret_idxs, c_idxs)
         return ret_idxs
 
      
     def get_mapped_class_idx(self, c_idx):
         ret_idx = c_idx
         if self.to_label_tx == True:
-            ret_idx = self.label_tx.transform([c_idx])[0] + self.label_offset
+            if self.subset_is_remapped == False:
+                ret_idx = self.label_tx.transform([c_idx])[0] + self.label_offset
+            # mapping subset is activated, check if is in mapped subset or not and act accordingly
+            elif c_idx not in self.subset_remapped_idxs:
+                ret_idx = self.label_tx.transform([c_idx])[0] + self.label_offset
+            else:
+                ret_idx = self.subset_label_tx.transform([c_idx])[0] + self.subset_label_offset
+
+ 
         return ret_idx
 
 
@@ -77,9 +118,19 @@ class ESC50(Dataset):
         cur_class = cur_entry['target']
         ret_label = None
         if self.to_label_tx == True:
-            cur_class = self.label_tx.transform([cur_class])[0] + self.label_offset
+            if self.subset_is_remapped == False:
+                cur_class = self.label_tx.transform([cur_class])[0] + self.label_offset
+            # mapping subset is activated, check if is in mapped subset or not and act accordingly
+            elif cur_class not in self.subset_remapped_idxs:
+                cur_class = self.label_tx.transform([cur_class])[0] + self.label_offset
+            else:
+                cur_class = self.subset_label_tx.transform([cur_class])[0] + self.subset_label_offset
+
         if self.one_hot == True:
-            ret_label = NF.one_hot(torch.tensor(cur_class), num_classes=self.num_classes)
+            if self.subset_is_remapped == False:
+                ret_label = NF.one_hot(torch.tensor(cur_class), num_classes=self.num_classes)
+            else:
+                ret_label = NF.one_hot(torch.tensor(cur_class), num_classes=(self.num_classes +  self.subset_num_remapped))
         else:
             ret_label = cur_class
         cur_snd = SL.sndloader(cur_fpath, want_sr=self.srate, max_samp=self.samp_sz, to_mono=True)
@@ -102,4 +153,5 @@ def make_esc50_fewshot_tasks(cur_df, folds=[], classes=[], n_way = 5, k_shot=np.
         curtup = (num_classes_to_add, cur_ds)
         ret.append(curtup)
         num_classes_allocated += num_classes_to_add
+        #print(classes)
     return ret
