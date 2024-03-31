@@ -267,6 +267,7 @@ class SampCNNModel(nn.Module):
         """
         if self.has_saved == False:
             torchviz.make_dot(net_out.mean(), params=dict(self.named_parameters())).render(directory=os.path.split(__file__)[0], view=True)
+            print('saving')
             self.has_saved = True
         """
         return net_out

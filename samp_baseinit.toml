@@ -1,13 +1,13 @@
 batch_size = 4
 cls_fn = "cos_sim"
 model = "samplecnn"
-base_epochs=30
-weightgen_epochs=1000
+base_epochs=25
+weightgen_epochs=250
 novel_epochs=1
 save_ivl = 1000
 label_smoothing = 0
 learning_rate = 0.00025
-learning_rate_weightgen = 0.0001
+learning_rate_weightgen = 0.1
 multilabel = false
 omit_last_relu = true
 sample_rate = 16000

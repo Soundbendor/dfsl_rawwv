@@ -111,14 +111,17 @@ class WeightGenCls(nn.Module):
         return kshot_mean
 
     def calc_w_n_plus_1(self, z_arr):
-        z_avg = torch.mean(z_arr, dim=0)
+        #print(z_arr.shape, z_avg.shape)
         w_att = self.calc_w_att(z_arr)
+        z_avg = torch.mean(z_arr, dim=0)
+        #print(self.phi_avg.requires_grad, self.phi_att.requires_grad, self.phi_q.requires_grad)
         cur_wn = torch.mul(self.phi_avg, z_avg) + torch.mul(self.phi_att, w_att)
         return cur_wn
         
     def set_pseudonovel_vec(self, k_novel_idx, k_novel_ft):
-
         cur_wn = self.calc_w_n_plus_1(k_novel_ft)
+        cur_idx = k_novel_idx - self.num_classes_base
+        #print(cur_idx)
         self.cls_vec_novel[k_novel_idx - self.num_classes_base] = cur_wn
 
    
@@ -135,12 +138,6 @@ class WeightGenCls(nn.Module):
         #print(needs_grad)
         self.cls_vec.requires_grad_(needs_grad)
         self.tau.requires_grad_(needs_grad)
-
-    def calc_w_n_plus_1_2(self, zarr, zavg, watt):
-        # z_arr should be (k, dim)
-        w_n_plus_1 = torch.mul(self.phi_avg, zavg) + torch.mul(self.phi_att, watt)
-        return w_n_plus_1
-   
 
     def weightgen_train_enable(self, to_enable): 
         self.k_b.requires_grad_(to_enable)
@@ -192,7 +189,9 @@ class WeightGenCls(nn.Module):
         if self.num_classes_novel > 0:
             ret_novel = self.cls_fn(ipt, self.cls_vec_novel)
             ret = torch.hstack((ret_base, ret_novel))
+            #print("jackpot")
         else:
             ret = ret_base
+        #print(ret.requires_grad)
         return ret
         # should be (bs, num_channels) x (num_channels, num_classes_base) = (bs, num_classes_base)

@@ -179,6 +179,7 @@ def batch_handler(cur_model, dloader_arr, batch_losser, batch_opter=None, batch_
                 #print(cl.shape)
                 #print(ci,cl)
                 #batch_loss = None
+                #print(cl, cl.shape, torch.argmax(pred,dim=1), pred.shape)
                 #batch_loss = batch_losser(pred, cl.to(torch.float).to(device))
                 batch_loss = batch_losser(pred, cl.to(device))
                 #print(pred.shape)
@@ -476,6 +477,7 @@ def base_weightgen_trainer(model, cur_loss, cur_optim, train_data, valid_data, l
         model.weightgen_train_enable(True)
         if to_print == True:
             print(f"\nEpoch {epoch_idx}\n ==========================")
+        print("training")
         res_wgen = batch_handler(model, [query_dl], cur_loss, batch_opter=cur_optim, batch_type = BatchType.train, device=device, epoch_idx=epoch_idx, train_phase = TrainPhase.base_weightgen, bs=bs, num_classes = num_classes_base + n_way, to_print=to_print, to_time = to_time, modelname=modelname, dsname = baseset, multilabel=multilabel)
         #print("got to here")
         if to_res == True:
