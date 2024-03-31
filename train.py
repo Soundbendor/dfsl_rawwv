@@ -198,10 +198,12 @@ def batch_handler(cur_model, dloader_arr, batch_losser, batch_opter=None, batch_
                     batch_times.append(time_finish - time_last)
                     time_last = time_start
                 """
+            """
             if train == True and train_phase == TrainPhase.base_weightgen:
                 batch_loss.backward()
                 batch_opter.step()
                 batch_opter.zero_grad()
+            """
             #del batch_loss
     #print(f"After no_grad {cur_model.classifier.cls_vec.requires_grad}")
     time_avg = -1
@@ -507,8 +509,9 @@ def base_weightgen_trainer(model, cur_loss, cur_optim, train_data, valid_data, l
     confmat_path = ""
     if to_graph == True:
         confmat_path = UR.plot_confmat(res_valid_batches[-1]['confmat'],multilabel=res_valid_batches[-1]['multilabel'],dest_dir=graph_dir, train_phase = TrainPhase.base_weightgen, expr_num=expr_num, modelname = modelname, baseset=baseset, novelset=novelset)
-    if len(confmat_path) > 0:
-        UN.nep_confmat_upload(nep,confmat_path ,batch_type=BatchType.test, train_phase = TrainPhase.base_init, modelname = modelname, ds_type = DatasetType.base, dsname = baseset)
+    if nep != None:
+        if len(confmat_path) > 0:
+            UN.nep_confmat_upload(nep,confmat_path ,batch_type=BatchType.valid, train_phase = TrainPhase.base_weightgen, modelname = modelname, ds_type = DatasetType.base, dsname = baseset)
 
 
     """
