@@ -1,5 +1,4 @@
-import os
-import argparse
+import os,sys
 import util.globals as UG
 from distutils.util import strtobool
 import tomllib
@@ -59,16 +58,18 @@ settings = {
         "novelset": "esc50",
         }
 
-parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-parser.add_argument("-t", "--toml", type=str, default=os.path.join(UG.DEF_ROOTDIR,"default.toml"), help="toml settings file")
+#parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+#parser.add_argument("-t", "--toml", type=str, default=os.path.join(UG.DEF_ROOTDIR,"default.toml"), help="toml settings file")
 
-args = parser.parse_args()
+tomlfile = "default.toml"
 try:
-    with open(args.toml, "rb") as f:
-        cur_settings = tomllib.load(f)
-        #print("got here")
-        settings.update(cur_settings)
-        print(f"read {args.toml}")
+    if len(sys.argv) > 1:
+        tomlfile = sys.argv[1]
+        with open(tomlfile, "rb") as f:
+            cur_settings = tomllib.load(f)
+            #print("got here")
+            settings.update(cur_settings)
+            print(f"read {tomlfile}")
 except:
-    print(f"error reading {args.toml}")
+    print(f"error reading {tomlfile}")
     quit()

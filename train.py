@@ -419,6 +419,9 @@ def base_weightgen_trainer(model, cur_loss, cur_optim, train_data, valid_data, l
     # number of batches
     model.zero_grad()
     cur_optim.zero_grad()
+    res_wgen_batches = []
+    res_valid_batches = []
+    # result accumulation
     for epoch_idx in range(epochs):
         # unmapped pseudonovel idxs
         #model.renum_novel_classes(0, device=device)
@@ -431,6 +434,7 @@ def base_weightgen_trainer(model, cur_loss, cur_optim, train_data, valid_data, l
         # collect all examples not used for support set, keep divided per class
         # for the heck of it, should be a tuple of number of examples, and then the actual indices
         train_data.set_remapped_idx_subset(pseudo_novel_class_idxs)
+        valid_data.set_remapped_idx_subset(pseudo_novel_class_idxs)
         #print(model.classifier.cls_vec_copy.shape)
         unsampled_pseudo_novel_ex_idxs = []
         for pseudo_novel_class_idx in pseudo_novel_class_idxs:
@@ -475,8 +479,14 @@ def base_weightgen_trainer(model, cur_loss, cur_optim, train_data, valid_data, l
 
         if nep != None:
             UN.nep_batch_parser(nep, res_wgen,batch_type=BatchType.train, train_phase = TrainPhase.base_weightgen, ds_type = DatasetType.base, modelname=modelname, dsname=baseset, ds_idx=0)
-        #res_valid = batch_handler(model, [valid_dload], cur_loss, batch_opter=None, batch_type = BatchType.valid, device=device, epoch_idx=epoch_idx, bs=bs, to_print=to_print, to_time = to_time, num_classes_base = num_classes_base, modelname=modelname, dsname=baseset, multilabel=multilabel)
-        """
+
+        # ------- validation stuff -----------------
+        model.weightgen_train_enable(False)
+        valid_dl = DataLoader(valid_data, batch_size=bs, shuffle=True,  generator = torch.Generator(device=device))
+        model.zero_grad()
+        cur_optim.zero_grad()
+
+        res_valid = batch_handler(model, [valid_dl], cur_loss, batch_opter=None, batch_type = BatchType.valid, device=device, epoch_idx=epoch_idx, bs=bs, to_print=to_print, to_time = to_time, num_classes = num_classes_base + n_way, modelname=modelname, dsname=baseset, multilabel=multilabel)
         if to_res == True:
             UR.res_csv_appender(res_valid, dest_dir=res_dir, expr_num = expr_num, epoch_idx=epoch_idx, batch_type=BatchType.valid, modelname=modelname, train_phase = TrainPhase.base_weightgen, baseset = baseset, novelset = novelset, pretrain = False)
         res_wgen_batches.append(res_wgen)
@@ -484,19 +494,20 @@ def base_weightgen_trainer(model, cur_loss, cur_optim, train_data, valid_data, l
 
         if nep != None:
             UN.nep_batch_parser(nep, res_valid,batch_type=BatchType.valid, train_phase = TrainPhase.base_weightgen, ds_type=DatasetType.base, modelname=modelname, dsname = baseset, ds_idx=0)
-        """
         # ~~~ end of loop save stuff ~~~
-        model.weightgen_train_enable(False)
-        model.zero_grad()
-        cur_optim.zero_grad()
-        #model.renum_novel_classes(0, device=device)
-        model.reset_copies(copy_back=True,device=device)
+        model.clear_exclude_idxs()
         train_data.unset_remapped_idx_subset()
+        valid_data.unset_remapped_idx_subset()
         if save_ivl > 0:
             if ((epoch_idx +1) % save_ivl == 0 and epoch_idx != 0) or epoch_idx == (epochs-1):
                 #model_saver(model, save_dir=save_dir, epoch_idx=epoch_idx, expr_num=expr_num, modelname = modelname, baseset = baseset, novelset = novelset, model_idx = 1, mtype="embedder")
                 model_saver(model, save_dir=save_dir, epoch_idx=epoch_idx, expr_num=expr_num, modelname = modelname, baseset= baseset, novelset = novelset, model_idx=1, mtype="classifier")
-
+    if to_graph == True:
+        confmat_path = UR.plot_confmat(res_valid_batches[-1]['confmat'],multilabel=res_valid_batches[-1]['multilabel'],dest_dir=graph_dir, train_phase = TrainPhase.base_weightgen, expr_num=expr_num, modelname = modelname, baseset=baseset, novelset=novelset)
+    """
+        UR.train_valid_grapher(res_wgen_batches, res_valid_batches, dest_dir="graph", graph_key="loss_avg", expr_idx=expr_num, modelname = modelname, baseset = baseset, novelset = novelset, expr_name="sampcnn_wgen")
+        UR.train_valid_grapher(res_valid_batches, res_valid_batches, dest_dir="graph", graph_key="time_avg", expr_num=expr_num, expr_name="sampcnn_wgen")
+    """
 
 
 
@@ -578,7 +589,6 @@ if __name__ == "__main__":
     #max_samp = 118098
     max_samp = 177147
     
-    print(torch.cuda.is_available(), args['use_cuda'])
     if torch.cuda.is_available() == True and args["use_cuda"] == True:
         device = 'cuda'
         torch.cuda.empty_cache()

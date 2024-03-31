@@ -244,9 +244,9 @@ class SampCNNModel(nn.Module):
         # k_novel_ex should be of size (k_novel, input_dim)
         #print(k_novel_ex.type())
         #print(f"Before Set: {self.classifier.cls_vec.requires_grad}")
-        with (torch.no_grad() if self.train_phase != TrainPhase.base_weightgen else contextlib.nullcontext()):
-            k_novel_ft = self.flatten(self.embedder(k_novel_ex))
-            self.classifier.set_pseudonovel_vec(k_novel_idx, k_novel_ft)
+        #with (torch.no_grad() if self.train_phase != TrainPhase.base_weightgen else contextlib.nullcontext()):
+        k_novel_ft = self.flatten(self.embedder(k_novel_ex))
+        self.classifier.set_pseudonovel_vec(k_novel_idx, k_novel_ft)
         #print(f"After Set: {self.classifier.cls_vec.requires_grad}")
 
     def renum_novel_classes(self, num_novel, device='cpu'):

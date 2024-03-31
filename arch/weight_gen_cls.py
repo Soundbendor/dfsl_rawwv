@@ -21,7 +21,7 @@ class WeightGenCls(nn.Module):
         self.dim = dim
         #self.base_classes = base_idxs
         self.sdev = torch.sqrt(torch.tensor(2.0/dim)) # from (3)
-        #self.sdev.requires_grad_(False)
+        self.sdev.requires_grad_(False)
 
         cls_vec = torch.randn(num_classes_base,dim) * self.sdev # from(3)
         #cls_vec = torch.zeros(num_classes_base,dim)
@@ -30,8 +30,8 @@ class WeightGenCls(nn.Module):
         #self.cls_vec_novel = torch.randn(num_classes,novel,dim) * self.sdev
 
         # separating out base and novel classes like gidaris
-        self.cls_vec_novel = torch.zeros(num_classes_novel,dim, requires_grad=False)
-        self.cls_vec_novel.requires_grad_(False)
+        self.cls_vec_novel = torch.zeros(num_classes_novel,dim)
+        #self.cls_vec_novel.requires_grad_(False)
         #from (2)
         self.cls_fn_type = 'cos_sim'
         tau = torch.tensor(10.)
@@ -43,15 +43,14 @@ class WeightGenCls(nn.Module):
         self.phi_q = Parameter(nn.init.xavier_normal_(torch.zeros(dim,dim))) #idea from (3)ish
         k_b = torch.randn(num_classes_base, dim) * self.sdev # copying init of cls_vec idea from (3)
         self.k_b = Parameter(k_b)
-        self.include_idxs = np.array([])
-        self.exclude_idxs = np.array([])
+        self.exclude_idxs = np.array(exclude_idxs)
+        self.has_exclude_idxs = len(exclude_idxs) > 0
+
         self.k_b.requires_grad_(False)
         self.phi_avg.requires_grad_(False)
         self.phi_att.requires_grad_(False)
         self.phi_q.requires_grad_(False)
         self.attn_smax = nn.Softmax(dim=1) #used to take attention over softmax for weight gen
-        self.cls_mask = torch.tensor([])
-        self.cls_mask.requires_grad_(False)
         #print(self.cls_vec.device, self.cls_vec_novel.device)
         if self.cls_fn_type == 'cos_sim':
             self.cls_fn = self.cos_sim
@@ -63,66 +62,15 @@ class WeightGenCls(nn.Module):
         
     def clear_exclude_idxs(self):
         self.exclude_idxs = np.array([])
+        self.has_exclude_idxs = False
 
     def cos_sim(self, ipt1, ipt2):
         ret = torch.matmul(nn.functional.normalize(ipt1,dim=1), nn.functional.normalize(ipt2, dim=1).T)
         return ret
    
-    def append_include_idxs(self, idxs):
-        self.include_idxs += idxs
-        #sorted(self.include_idxs)
-
     def set_exclude_idxs(self, exclude_idxs, device='cpu'):
         self.exclude_idxs = np.array(exclude_idxs)
-        self.cls_vec_novel.detach()
-        #self.cls_vec_novel.requires_grad_(False)
-        #print(self.exclude_idxs)
-        try:
-            del self.cls_vec_copy
-            del self.cls_vec_pseudo
-            #del self.k_b_copy
-        except:
-            pass
-        self.calc_mask(self.cls_vec)
-        cls_vec_copy = Parameter(self.cls_vec.clone().detach()).to(device)
-        cls_vec_copy.requires_grad_(False)
-        self.cls_vec_copy = self.apply_mask(cls_vec_copy)
-        self.cls_vec_pseudo = self.cls_vec_copy.clone().detach()
-        self.cls_vec_pseudo.requires_grad_(False)
-        self.cls_vec_copy.requires_grad_(True)
-
-        #self.k_b_copy = self.k_b.clone().detach()
-        #self.k_b_copy[exclude_idxs] = 0.
-        #self.k_b_copy.requires_grad_(True)
-        #self.k_b.requires_grad_(False)
-
-    def reset_copies(self, copy_back = True, device='cpu'):
-        if copy_back == True:
-            if self.cls_vec_copy != None:
-                self.cls_vec_copy = Parameter(self.cls_vec_copy.detach()).to(device)
-                self.cls_vec = Parameter(self.cls_vec.detach()).to(device)
-                self.cls_vec.requires_grad_(False)
-                cur_sz = self.cls_vec.shape[0]
-                idxs_to_set = np.setdiff1d(np.arange(0,cur_sz,1), self.exclude_idxs)
-                self.cls_vec[idxs_to_set,:] = self.cls_vec_copy[idxs_to_set,:]
-                self.cls_vec.requires_grad_(True)
-        self.exclude_idxs = np.array([])
-        try:
-            del self.cls_vec_copy
-            del self.cls_vec_pseudo
-            #del self.k_b_copy
-
-            self.cls_vec_copy = None
-            self.cls_vec_pseudo = None
-            #self.k_b_copy = None
-
-        except:
-            pass
-        #self.k_b_copy.requires_grad_(False)
-        #self.k_b_copy[self.exclude_idxs] = self.k_b[self.exclude_idxs]
-        #self.k_b = nn.Parameter(self.k_b_copy.clone().detach())
-        #self.k_b.requires_grad_(True)
-
+        self.has_exclude_idxs = self.exclude_idxs.shape[0] > 0
 
 
     # change number of classification vector slots
@@ -134,17 +82,12 @@ class WeightGenCls(nn.Module):
         old_num = self.num_classes_novel
         #print(old_num,novel_clip_num)
         if novel_clip_num != old_num:
-            self.cls_vec_novel.detach()
-            self.cls_vec_novel.requires_grad_(False)
             self.cls_vec_novel.resize_(novel_clip_num, self.dim)
             self.num_classes_novel = novel_clip_num
-            self.cls_vec_novel.requires_grad_(True)
         #print(resize_num)
         return novel_clip_num
         
         
-    def set_include_idxs(self, idxs):
-        self.include_idxs = idxs
 
     def calc_mask(self, to_mask):
         cur_mask = torch.ones_like(to_mask, requires_grad = False)
@@ -158,23 +101,32 @@ class WeightGenCls(nn.Module):
         ret = torch.mul(to_mask, self.cls_mask)
         return ret
 
+    # borrowing indexing idea from (3)
+    def get_nonexcluded_idxs(self):
+        # get indices that are not excluded
+        return np.setdiff1d(np.arange(0, self.num_classes_base), self.exclude_idxs)
+
 
 
     def calc_w_att(self, z_arr):
         #z_arr = (k_shot, dim)
         zq = torch.matmul(z_arr, self.phi_q) # (k_shot, dim) x (dim, dim) = (k_shot, dim)
         # "spiked" cos sim, gives sim scores across rows for each k_shot input
-        cur_csim = self.gamma * self.cos_sim(zq, self.k_b) # (k_shot, dim) x (dim, nb) = (k_shot, nb)
-        # softmax over the base classes (dim = 1)
-        cur_smax = self.attn_smax(cur_csim)
+        
         attended = None
         # each row sums over base classes for each k shot input
-        if self.train_phase == TrainPhase.base_weightgen:
-            # use the hacky pseudo copy of base vectors
-            attended = torch.matmul(cur_smax, self.cls_vec_pseudo[:self.num_classes_base])
+        if self.has_exclude_idxs == False:
+            # doesn't have excluded indices, use simpler indexing scheme
+            cur_csim = self.gamma * self.cos_sim(zq, self.k_b) # (k_shot, dim) x (dim, nb) = (k_shot, nb)
+            # softmax over the base classes (dim = 1)
+            cur_smax = self.attn_smax(cur_csim)
+            attended = torch.matmul(cur_smax, self.cls_vec)
         else:
-            # just use the normal base classifier vectors since no training
-            attended = torch.matmul(cur_smax, self.cls_vec[:self.num_classes_base])
+            nonex_idxs = self.get_nonexcluded_idxs()
+            cur_csim = self.gamma * self.cos_sim(zq, self.k_b[nonex_idxs]) # (k_shot, dim) x (dim, nb) = (k_shot, nb)
+            cur_smax = self.attn_smax(cur_csim)
+            attended = torch.matmul(cur_smax, self.cls_vec[nonex_idxs])
+
         kshot_mean = torch.mean(attended, dim=0) # mean over all kshot inputs
         return kshot_mean
 
@@ -198,8 +150,7 @@ class WeightGenCls(nn.Module):
         #if self.train_phase == TrainPhase.base_weightgen:
         #self.cls_vec_novel.detach()
         #self.cls_vec_novel.requires_grad_(False)
-        with torch.no_grad():
-            self.cls_vec_novel[k_novel_idx - self.num_classes_base] = cur_wn
+        self.cls_vec_novel[k_novel_idx - self.num_classes_base] = cur_wn
 
    
     def print_cls_vec_norms(self):
@@ -228,7 +179,6 @@ class WeightGenCls(nn.Module):
         self.phi_att.requires_grad_(to_enable)
         self.phi_q.requires_grad_(to_enable)
         #try:
-        self.cls_vec_copy.requires_grad_(to_enable)
         #self.cls_vec_novel.requires_grad_(to_enable)
         #except:
         #print('cannot enable cls vec training')
@@ -265,15 +215,20 @@ class WeightGenCls(nn.Module):
         # return classifier cosine similarity scores
         ret_base = None
         ret = None
-        if self.train_phase != TrainPhase.base_weightgen:
-            #cur_mask = self.calc_mask(self.cls_vec)
-            ret_base = self.tau * self.cls_fn(ipt, self.cls_vec)
-        else:
-            ret_base = self.tau * self.cls_fn(ipt,self.cls_vec_copy)
 
+        if self.has_exclude_idxs == False:
+            # no excluded indices, just do as normal 
+            ret_base = self.cls_fn(ipt, self.cls_vec)
+        else:
+            bs = ipt.shape[0]
+            # has excluded indices, just fill in everything excluded as 0
+            ret_base = torch.zeros(bs, self.num_classes_base)
+            nonex_idxs = self.get_nonexcluded_idxs()
+            nonex_scores = self.cls_fn(ipt, self.cls_vec[nonex_idxs])
+            ret_base[:,nonex_idxs] = nonex_scores
         if self.num_classes_novel > 0:
-            with torch.no_grad():
-                ret_novel = self.cls_fn(ipt, self.cls_vec_novel)
+            #with torch.no_grad():
+            ret_novel = self.cls_fn(ipt, self.cls_vec_novel)
             ret = torch.hstack((ret_base, ret_novel))
             #print(self.num_classes_novel)
         else:

@@ -34,8 +34,8 @@ n_way = 5
 k_shot = 4
 
 emb_load_num = 29
-cls_load_num = 499
-expr_num = 1711699873485
+cls_load_num = 99
+expr_num = 1711861663329
 emb_idx = 0
 cls_idx = 1
 model_dir ='/media/dxk/tosh_ext/fscil/dfsl_rawwv/save'
