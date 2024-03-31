@@ -61,12 +61,6 @@ class CNN14Model(nn.Module):
     def freeze_classifier(self,to_freeze):
         self.classifier.freeze_classifier(to_freeze)
 
-    """
-    def init_zarr(self, k_novel, k_samp, k_dim, device='cpu'):
-        self.zarr = torch.zeros((k_novel, k_samp, k_dim), requires_grad=False).to(device)
-        self.zclass = np.zeros(k_novel, dtype=int)
-        self.zidx = 0
-    """
     def set_train_phase(self, cur_tp):
         self.train_phase = cur_tp
         if cur_tp in [TrainPhase.base_weightgen, TrainPhase.novel_valid, TrainPhase.novel_test, TrainPhase.base_test]:
@@ -91,53 +85,30 @@ class CNN14Model(nn.Module):
 
     def weightgen_train_enable(self, to_enable):
         self.classifier.weightgen_train_enable(to_enable)
-    """
-    def set_zarr(self, k_novel_samp, k_novel_idx):
-        k_novel_ft = self.flatten(self.embedder(k_novel_samp))
-        self.zarr[self.zidx] = k_novel_ft
-        self.zclass[self.zidx] = k_novel_idx
-        self.zidx += 1
-    """
-    """
-    def calc_pseudonovel_vecs(self):
-        self.zavg = torch.mean(self.zarr, dim=1)
-        self.zavg.requires_grad_(False)
-        self.watt = torch.zeros_like(self.zavg)
-        for i in range(self.zavg.shape[0]):
-            self.watt[i] = self.classifier.calc_w_att(self.zarr[i])
-        self.classifier.calc_pseudonovel_vecs(self.zarr,self.zavg, self.zclass, self.watt)
-    """
+    
     def set_pseudonovel_vec(self, k_novel_idx, k_novel_ex):
         # k_novel_ex should be of size (k_novel, input_dim)
         #print(k_novel_ex.type())
-        with (torch.no_grad() if self.train_phase != TrainPhase.base_weightgen else contextlib.nullcontext()):
-            mel_out = self.melspect(k_novel_ex)
-            log_txed = torch.log(mel_out + self.logfuzz)
-            # k_novel, channels, n_mels_time
-            emb_out = self.embedder(log_txed)
-            # k_novel, out_channel, n_mels, time
-            emb_tr = emb_out.transpose(-2,-1)
-            # k_novel, out_channel, time, n_mels
-            # average over n_mels per timestep
-            cmean_mel = torch.mean(emb_tr, dim=3)
-            # get max from time steps
-            cmax_time = torch.max(cmean_mel, dim=2)[0] # returns tuple of values and indices
-            # get mean from time steps
-            cmean_time = torch.mean(cmean_mel, dim=2)
-            cm_out = cmax_time + cmean_time
-            # (1) has last dropout before FCN
-            do_out = self.last_dropout(cm_out) # not sure if need?
-            #k_novel_ft = self.flatten(cm_out)
-            self.classifier.set_pseudonovel_vec(k_novel_idx, do_out)
-    """
-    def set_pseudonovel_vecs(self, k_novel_idxs, k_novel_sz, k_novel_exs):
-        # k_novel_idxs should be of size k_novel
-        # k_novel_ex should be of size (all_sizes, input_dim)
-        k_novel_fts = self.flatten(self.embedder(k_novel_exs))
-        self.classifier.set_pseudonovel_vecs(k_novel_idxs,k_novel_fts)
-    """
-
-
+        #with (torch.no_grad() if self.train_phase != TrainPhase.base_weightgen else contextlib.nullcontext()):
+        mel_out = self.melspect(k_novel_ex)
+        log_txed = torch.log(mel_out + self.logfuzz)
+        # k_novel, channels, n_mels_time
+        emb_out = self.embedder(log_txed)
+        # k_novel, out_channel, n_mels, time
+        emb_tr = emb_out.transpose(-2,-1)
+        # k_novel, out_channel, time, n_mels
+        # average over n_mels per timestep
+        cmean_mel = torch.mean(emb_tr, dim=3)
+        # get max from time steps
+        cmax_time = torch.max(cmean_mel, dim=2)[0] # returns tuple of values and indices
+        # get mean from time steps
+        cmean_time = torch.mean(cmean_mel, dim=2)
+        cm_out = cmax_time + cmean_time
+        # (1) has last dropout before FCN
+        do_out = self.last_dropout(cm_out) # not sure if need?
+        #k_novel_ft = self.flatten(cm_out)
+        self.classifier.set_pseudonovel_vec(k_novel_idx, do_out)
+   
     def renum_novel_classes(self, num_novel, device='cpu'):
        self.num_classes_novel = self.classifier.renum_novel_classes(num_novel,device=device)
 

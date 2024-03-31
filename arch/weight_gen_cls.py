@@ -24,10 +24,7 @@ class WeightGenCls(nn.Module):
         self.sdev.requires_grad_(False)
 
         cls_vec = torch.randn(num_classes_base,dim) * self.sdev # from(3)
-        #cls_vec = torch.zeros(num_classes_base,dim)
-        #self.cls_vec = Parameter(nn.init.xavier_normal_(cls_vec)) # idea from (3)
         self.cls_vec = Parameter(cls_vec) # idea from (3)
-        #self.cls_vec_novel = torch.randn(num_classes,novel,dim) * self.sdev
 
         # separating out base and novel classes like gidaris
         self.cls_vec_novel = torch.zeros(num_classes_novel,dim)
@@ -46,12 +43,11 @@ class WeightGenCls(nn.Module):
         self.exclude_idxs = np.array(exclude_idxs)
         self.has_exclude_idxs = len(exclude_idxs) > 0
 
-        self.k_b.requires_grad_(False)
-        self.phi_avg.requires_grad_(False)
-        self.phi_att.requires_grad_(False)
-        self.phi_q.requires_grad_(False)
+        #self.k_b.requires_grad_(False)
+        #self.phi_avg.requires_grad_(False)
+        #self.phi_att.requires_grad_(False)
+        #self.phi_q.requires_grad_(False)
         self.attn_smax = nn.Softmax(dim=1) #used to take attention over softmax for weight gen
-        #print(self.cls_vec.device, self.cls_vec_novel.device)
         if self.cls_fn_type == 'cos_sim':
             self.cls_fn = self.cos_sim
         else:
@@ -75,32 +71,16 @@ class WeightGenCls(nn.Module):
 
     # change number of classification vector slots
     def renum_novel_classes(self, num_novel_classes,device='cpu'):
-        #if grad_was_true == True:
-        #    self.cls_vec.requires_grad_(False)
         novel_clip_num = max(0, num_novel_classes)
-        #print("novel_clip_num", novel_clip_num)
         old_num = self.num_classes_novel
-        #print(old_num,novel_clip_num)
         if novel_clip_num != old_num:
             self.cls_vec_novel.resize_(novel_clip_num, self.dim)
             self.num_classes_novel = novel_clip_num
-        #print(resize_num)
         return novel_clip_num
         
         
 
-    def calc_mask(self, to_mask):
-        cur_mask = torch.ones_like(to_mask, requires_grad = False)
-        if len(self.include_idxs) > 0:
-            cur_mask[self.include_idxs] = 1.
-        if self.exclude_idxs.shape[0] > 0:
-            cur_mask[self.exclude_idxs] = 0.
-        self.cls_mask = cur_mask
-
-    def apply_mask(self, to_mask):
-        ret = torch.mul(to_mask, self.cls_mask)
-        return ret
-
+    
     # borrowing indexing idea from (3)
     def get_nonexcluded_idxs(self):
         # get indices that are not excluded
@@ -132,24 +112,13 @@ class WeightGenCls(nn.Module):
 
     def calc_w_n_plus_1(self, z_arr):
         z_avg = torch.mean(z_arr, dim=0)
-        #print("calcing w_att")
         w_att = self.calc_w_att(z_arr)
-        #print("doing mul")
         cur_wn = torch.mul(self.phi_avg, z_avg) + torch.mul(self.phi_att, w_att)
         return cur_wn
         
     def set_pseudonovel_vec(self, k_novel_idx, k_novel_ft):
 
-        #self.phi_avg = Parameter(torch.randn(dim)*self.sdev) # idea from (3)ish
-        #self.phi_att = Parameter(torch.randn(dim)*self.sdev) # idea from (3)ish
-        #self.phi_q = Parameter(nn.init.xavier_normal_(torch.zeros(dim,dim))) #idea from (3)ish
-        #k_b = torch.randn(num_classes_base, dim) * self.sdev # copying init of cls_vec idea from (3)
-        #self.k_b = Parameter(k_b)
-        #print("calling")
         cur_wn = self.calc_w_n_plus_1(k_novel_ft)
-        #if self.train_phase == TrainPhase.base_weightgen:
-        #self.cls_vec_novel.detach()
-        #self.cls_vec_novel.requires_grad_(False)
         self.cls_vec_novel[k_novel_idx - self.num_classes_base] = cur_wn
 
    
@@ -178,13 +147,7 @@ class WeightGenCls(nn.Module):
         self.phi_avg.requires_grad_(to_enable)
         self.phi_att.requires_grad_(to_enable)
         self.phi_q.requires_grad_(to_enable)
-        #try:
-        #self.cls_vec_novel.requires_grad_(to_enable)
-        #except:
-        #print('cannot enable cls vec training')
-        #pass
-
-
+ 
     def calc_pseudonovel_vecs(self, zarrs, zavgs, zclasses, watt):
         for i in range(zarrs.shape[0]):
             self.cls_vec_novel[zclasses[i]- self.num_classes_base]  = self.calc_w_n_plus_1_2(zarrs[i], zavgs[i], watt[i])
@@ -227,10 +190,8 @@ class WeightGenCls(nn.Module):
             nonex_scores = self.cls_fn(ipt, self.cls_vec[nonex_idxs])
             ret_base[:,nonex_idxs] = nonex_scores
         if self.num_classes_novel > 0:
-            #with torch.no_grad():
             ret_novel = self.cls_fn(ipt, self.cls_vec_novel)
             ret = torch.hstack((ret_base, ret_novel))
-            #print(self.num_classes_novel)
         else:
             ret = ret_base
         return ret

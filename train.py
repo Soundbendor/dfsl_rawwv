@@ -264,6 +264,8 @@ def novel_tester(model, cur_loss, base_test_data, novel_test_datas, bs = 4, epoc
     model.eval()
     model.zero_grad()
     model.set_train_phase(train_phase)
+    model.weightgen_train_enable(False)
+    
 
     model.freeze_classifier(True)
     base_class_idxs = base_test_data.get_class_idxs()
@@ -472,7 +474,7 @@ def base_weightgen_trainer(model, cur_loss, cur_optim, train_data, valid_data, l
         model.weightgen_train_enable(True)
         if to_print == True:
             print(f"\nEpoch {epoch_idx}\n ==========================")
-        res_wgen = batch_handler(model, [query_dl], cur_loss, batch_opter=cur_optim, batch_type = cur_tp, device=device, epoch_idx=epoch_idx, train_phase = TrainPhase.base_weightgen, bs=bs, num_classes = num_classes_base + n_way, to_print=to_print, to_time = to_time, modelname=modelname, dsname = baseset, multilabel=multilabel)
+        res_wgen = batch_handler(model, [query_dl], cur_loss, batch_opter=cur_optim, batch_type = BatchType.train, device=device, epoch_idx=epoch_idx, train_phase = TrainPhase.base_weightgen, bs=bs, num_classes = num_classes_base + n_way, to_print=to_print, to_time = to_time, modelname=modelname, dsname = baseset, multilabel=multilabel)
         #print("got to here")
         if to_res == True:
             UR.res_csv_appender(res_wgen, dest_dir=res_dir, expr_num = expr_num, epoch_idx=epoch_idx, batch_type=BatchType.train, train_phase = TrainPhase.base_weightgen, baseset=baseset, novelset = novelset )
@@ -502,8 +504,13 @@ def base_weightgen_trainer(model, cur_loss, cur_optim, train_data, valid_data, l
             if ((epoch_idx +1) % save_ivl == 0 and epoch_idx != 0) or epoch_idx == (epochs-1):
                 #model_saver(model, save_dir=save_dir, epoch_idx=epoch_idx, expr_num=expr_num, modelname = modelname, baseset = baseset, novelset = novelset, model_idx = 1, mtype="embedder")
                 model_saver(model, save_dir=save_dir, epoch_idx=epoch_idx, expr_num=expr_num, modelname = modelname, baseset= baseset, novelset = novelset, model_idx=1, mtype="classifier")
+    confmat_path = ""
     if to_graph == True:
         confmat_path = UR.plot_confmat(res_valid_batches[-1]['confmat'],multilabel=res_valid_batches[-1]['multilabel'],dest_dir=graph_dir, train_phase = TrainPhase.base_weightgen, expr_num=expr_num, modelname = modelname, baseset=baseset, novelset=novelset)
+    if len(confmat_path) > 0:
+        UN.nep_confmat_upload(nep,confmat_path ,batch_type=BatchType.test, train_phase = TrainPhase.base_init, modelname = modelname, ds_type = DatasetType.base, dsname = baseset)
+
+
     """
         UR.train_valid_grapher(res_wgen_batches, res_valid_batches, dest_dir="graph", graph_key="loss_avg", expr_idx=expr_num, modelname = modelname, baseset = baseset, novelset = novelset, expr_name="sampcnn_wgen")
         UR.train_valid_grapher(res_valid_batches, res_valid_batches, dest_dir="graph", graph_key="time_avg", expr_num=expr_num, expr_name="sampcnn_wgen")
