@@ -184,10 +184,10 @@ class WeightGenCls(nn.Module):
             # has excluded indices, just fill in everything excluded as 0
             ret_base = torch.zeros(bs, self.num_classes_base)
             nonex_idxs = self.get_nonexcluded_idxs()
-            nonex_scores = self.cls_fn(ipt, self.cls_vec[nonex_idxs])
+            nonex_scores = self.tau * self.cls_fn(ipt, self.cls_vec[nonex_idxs])
             ret_base[:,nonex_idxs] = nonex_scores
         if self.num_classes_novel > 0:
-            ret_novel = self.cls_fn(ipt, self.cls_vec_novel)
+            ret_novel = self.tau * self.cls_fn(ipt, self.cls_vec_novel)
             ret = torch.hstack((ret_base, ret_novel))
             #print("jackpot")
         else:
