@@ -144,6 +144,7 @@ class WeightGenCls(nn.Module):
         self.phi_avg.requires_grad_(to_enable)
         self.phi_att.requires_grad_(to_enable)
         self.phi_q.requires_grad_(to_enable)
+        self.tau.requires_grad_(to_enable)
  
     def calc_pseudonovel_vecs(self, zarrs, zavgs, zclasses, watt):
         for i in range(zarrs.shape[0]):

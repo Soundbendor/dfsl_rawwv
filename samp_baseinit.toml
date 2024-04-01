@@ -1,7 +1,7 @@
 batch_size = 4
 cls_fn = "cos_sim"
 model = "samplecnn"
-base_epochs=25
+base_epochs=35
 weightgen_epochs=1000
 novel_epochs=1
 save_ivl = 1000
