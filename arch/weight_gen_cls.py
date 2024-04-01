@@ -100,20 +100,21 @@ class WeightGenCls(nn.Module):
             cur_csim = self.gamma * self.cos_sim(zq, self.k_b) # (k_shot, dim) x (dim, nb) = (k_shot, nb)
             # softmax over the base classes (dim = 1)
             cur_smax = self.attn_smax(cur_csim)
-            attended = torch.matmul(cur_smax, self.cls_vec)
+            attended = torch.matmul(cur_smax, nn.functional.normalize(self.cls_vec,dim=1,p=2))
         else:
             nonex_idxs = self.get_nonexcluded_idxs()
             cur_csim = self.gamma * self.cos_sim(zq, self.k_b[nonex_idxs]) # (k_shot, dim) x (dim, nb) = (k_shot, nb)
             cur_smax = self.attn_smax(cur_csim)
-            attended = torch.matmul(cur_smax, self.cls_vec[nonex_idxs])
+            attended = torch.matmul(cur_smax, nn.functional.normalize(self.cls_vec[nonex_idxs], p=2))
 
         kshot_mean = torch.mean(attended, dim=0) # mean over all kshot inputs
         return kshot_mean
 
     def calc_w_n_plus_1(self, z_arr):
         #print(z_arr.shape, z_avg.shape)
-        w_att = self.calc_w_att(z_arr)
-        z_avg = torch.mean(z_arr, dim=0)
+        z_normed = nn.functional.normalize(z_arr,dim=1,p=2)
+        w_att = self.calc_w_att(z_normed)
+        z_avg = torch.mean(z_normed, dim=0)
         #print(self.phi_avg.requires_grad, self.phi_att.requires_grad, self.phi_q.requires_grad)
         cur_wn = torch.mul(self.phi_avg, z_avg) + torch.mul(self.phi_att, w_att)
         return cur_wn
