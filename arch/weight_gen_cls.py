@@ -105,7 +105,7 @@ class WeightGenCls(nn.Module):
             nonex_idxs = self.get_nonexcluded_idxs()
             cur_csim = self.gamma * self.cos_sim(zq, self.k_b[nonex_idxs]) # (k_shot, dim) x (dim, nb) = (k_shot, nb)
             cur_smax = self.attn_smax(cur_csim)
-            attended = torch.matmul(cur_smax, nn.functional.normalize(self.cls_vec[nonex_idxs], p=2))
+            attended = torch.matmul(cur_smax, nn.functional.normalize(self.cls_vec[nonex_idxs], dim=1, p=2))
 
         kshot_mean = torch.mean(attended, dim=0) # mean over all kshot inputs
         return kshot_mean
