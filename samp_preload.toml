@@ -26,20 +26,21 @@ to_print = true
 to_time = true
 to_graph = true
 to_res = true
-to_nep = true
+to_nep = false
 train_phase = "novel_valid"
 baseset="esc50"
-novelset="esc50"
+novelset="tinysol"
 n_way = 5
 k_shot = 4
 
-emb_load_num = 29
+emb_load_num = 34
 cls_load_num = 99
-expr_num = 1711861663329
+expr_num = 1712014821192
 emb_idx = 0
 cls_idx = 1
 model_dir ='/media/dxk/tosh_ext/fscil/dfsl_rawwv/save'
 
 save_dir = '/media/dxk/tosh_ext/fscil/dfsl_rawwv/save'
 base_dir ='/home/dxk/ds/ESC-50-master'
-novel_dir ='/home/dxk/ds/ESC-50-master'
+#novel_dir ='/home/dxk/ds/ESC-50-master'
+novel_dir ='/home/dxk/ds/TinySOL'

@@ -74,7 +74,10 @@ class WeightGenCls(nn.Module):
         novel_clip_num = max(0, num_novel_classes)
         old_num = self.num_classes_novel
         if novel_clip_num != old_num:
-            self.cls_vec_novel.resize_(novel_clip_num, self.dim)
+            new_cls_vec_novel = self.cls_vec_novel.clone().detach()
+            new_cls_vec_novel.resize_(novel_clip_num, self.dim)
+            new_cls_vec_novel[:old_num] = self.cls_vec_novel[:old_num]
+            self.cls_vec_novel = new_cls_vec_novel 
             self.num_classes_novel = novel_clip_num
         return novel_clip_num
         
