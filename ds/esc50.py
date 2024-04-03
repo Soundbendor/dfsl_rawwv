@@ -39,6 +39,7 @@ class ESC50(Dataset):
         self.num_classes_total = self.df['target'].max() + 1 # zero-indexed
         # essentially a way of shuffling
         self.dfsub = self.df.set_index(['fold', 'target']).loc[folds,classes,:].groupby('target').sample(self.k_shot, random_state=seed, replace=False).reset_index()
+        self.class_counts = np.array([self.dfsub.loc[self.dfsub['target'] == x].shape[0] for x in self.classes])
         #print(self.dfsub)
         self.samp_sz = samp_sz
         self.shape = self.dfsub.shape
@@ -56,7 +57,6 @@ class ESC50(Dataset):
  
     # num_unremapped/remapped overrides class counts for unremapped/remapped
     def get_class_weights(self, num_unremapped = -1, num_remapped = -1):
-        self.class_counts = np.array([self.df.loc[self.df['target'] == x].shape[0] for x in self.classes])
         tmp = np.zeros(self.num_classes + self.label_offset)
         if self.to_label_tx == True:
             class_counts = self.class_counts

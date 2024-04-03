@@ -69,6 +69,7 @@ class TinySOL(Dataset):
         # essentially a way of shuffling
         #self.dfsub = self.df.set_index(['fold', 'target']).loc[folds,classes,:].groupby('target').sample(self.k_shot, random_state=seed, replace=False).reset_index()
         self.dfsub = self.df.set_index([self.fold_cat, self.inst_cat]).loc[self.folds, self.classes_str,:].groupby(self.inst_cat).sample(self.k_shot, random_state=seed, replace=False).reset_index()
+        self.class_counts = np.array([self.dfsub.loc[self.dfsub[self.inst_cat] == x].shape[0] for x in self.classes_str])
         #print(self.dfsub)
         self.samp_sz = samp_sz
         self.shape = self.dfsub.shape
@@ -106,6 +107,29 @@ class TinySOL(Dataset):
                         cur_ret_idx = self.subset_label_tx.transform([cur_class])[0] + self.subset_label_offset
                     ret_idxs.append(cur_ret_idx)
         return ret_idxs
+ 
+    # num_unremapped/remapped overrides class counts for unremapped/remapped
+    def get_class_weights(self, num_unremapped = -1, num_remapped = -1):
+        tmp = np.zeros(self.num_classes + self.label_offset)
+        if self.to_label_tx == True:
+            class_counts = self.class_counts
+            if num_unremapped > 0:
+                class_counts = np.array([1./num_unremapped for _ in self.classes])
+            tx_idx = self.label_tx.transform(self.classes) + self.label_offset
+            tmp[tx_idx] = class_counts
+        if self.subset_is_remapped == True:
+            remap_idx = list(self.subset_remapped_idxs)
+            tmp[remap_idx] = 0
+            tmp2 = np.zeros(self.subset_num_remapped)
+            remap_idx2 = self.subset_label_tx(remap_idx)
+            tmp2[remap_idxs2] = np.array([self.class_counts[x] for x  in remap_idx])
+            if num_remapped > 0:
+                tmp2[remap_idxs2] = np.array([1./num_remapped for _  in remap_idx])
+            tmp = np.hstack((tmp, tmp2))
+        num_classes = np.sum(np.where(tmp > 0., 1., 0.))
+        class_prop = np.where( tmp > 0, 1./(tmp*num_classes), 0.)
+        #print(class_prop)
+        return class_prop
 
      
     def get_mapped_class_idx(self, c_idx):
