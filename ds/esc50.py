@@ -37,8 +37,6 @@ class ESC50(Dataset):
             self.label_offset = label_offset
         self.one_hot = one_hot
         self.num_classes_total = self.df['target'].max() + 1 # zero-indexed
-        self.class_counts = np.array([self.df.loc[self.df['target'] == x].shape[0] for x in self.classes])
-        self.class_prop = 1./self.class_counts
         # essentially a way of shuffling
         self.dfsub = self.df.set_index(['fold', 'target']).loc[folds,classes,:].groupby('target').sample(self.k_shot, random_state=seed, replace=False).reset_index()
         #print(self.dfsub)
@@ -55,7 +53,31 @@ class ESC50(Dataset):
     # unmapped idxs
     def get_class_idxs(self):
         return self.classes
-   
+ 
+    # num_unremapped/remapped overrides class counts for unremapped/remapped
+    def get_class_weights(self, num_unremapped = -1, num_remapped = -1):
+        self.class_counts = np.array([self.df.loc[self.df['target'] == x].shape[0] for x in self.classes])
+        tmp = np.zeros(self.num_classes + self.label_offset)
+        if self.to_label_tx == True:
+            class_counts = self.class_counts
+            if num_unremapped > 0:
+                class_counts = np.array([1./num_unremapped for _ in self.classes])
+            tx_idx = self.label_tx.transform(self.classes) + self.label_offset
+            tmp[tx_idx] = class_counts
+        if self.subset_is_remapped == True:
+            remap_idx = list(self.subset_remapped_idxs)
+            tmp[remap_idx] = 0
+            tmp2 = np.zeros(self.subset_num_remapped)
+            remap_idx2 = self.subset_label_tx(remap_idx)
+            tmp2[remap_idxs2] = np.array([self.class_counts[x] for x  in remap_idx])
+            if num_remapped > 0:
+                tmp2[remap_idxs2] = np.array([1./num_remapped for _  in remap_idx])
+            tmp = np.hstack((tmp, tmp2))
+        num_classes = np.sum(np.where(tmp > 0., 1., 0.))
+        class_prop = np.where( tmp > 0, 1./(tmp*num_classes), 0.)
+        #print(class_prop)
+        return class_prop
+
    # given a set of unmapped indices, map them to a new set of indices with offset
     def set_remapped_idx_subset(self, idx_subset):
         self.subset_is_remapped = True

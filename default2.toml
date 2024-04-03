@@ -21,7 +21,7 @@ to_time=true
 to_graph=true
 to_res=true
 to_nep=false
-train_phase='base_trainall'
+train_phase='base_weightgen'
 
 
 n_way = 5
