@@ -1,6 +1,6 @@
 import numpy as np
 import torch
-import os
+import os,sys
 import pandas as pd
 from . import sndload as SL
 from torch.utils.data import Dataset
@@ -22,12 +22,12 @@ class AudioSet(Dataset):
         self.srate = srate
         # indices
         self.classes = sorted(classes)
+        self.df = cur_df
         self.labels = self.get_labels()
         self.label_list = sorted(list(self.labels))
         self.audiopath = os.path.join(self.basepath, 'train_wav')
         if dset_type != "train":
             self.audiopath = os.path.join(self.basepath, 'valid_wav')
-        self.df = cur_df
         self.num_folds = len(folds)
         # 5 folds, max 8 samples per fold
         # k = number of examples per class
@@ -89,7 +89,7 @@ class AudioSet(Dataset):
 
     def get_label_list(self):
         ret = []
-        for lgroup in self.cur_df["positive_labels"]:
+        for lgroup in self.df["positive_labels"]:
             cur = [x.strip() for x in lgroup.split(",")]
             ret += cur
         ret = sorted(list(set(ret)))
@@ -97,7 +97,7 @@ class AudioSet(Dataset):
 
     def get_labels(self):
         ret = {}
-        for lgroup in self.cur_df["positive_labels"]:
+        for lgroup in self.df["positive_labels"]:
             cur = [x.strip() for x in lgroup.split(",")]
             for x in cur:
                 if x in ret.keys():
@@ -107,7 +107,7 @@ class AudioSet(Dataset):
         ret_ser = pd.Series(data=ret)
         return ret_ser
 
-def make_esc50_fewshot_tasks(cur_df, folds=[], classes=[], n_way = 5, k_shot=np.inf, srate = 16000, samp_sz = 118098, basefolder = UG.DEF_ESC50DIR,, seed = 3, initial_label_offset = 30, to_label_tx = True):
+def make_audioset_fewshot_tasks(cur_df, folds=[], classes=[], n_way = 5, k_shot=np.inf, srate = 16000, samp_sz = 118098, basefolder = UG.DEF_AUDIOSETDIR,seed = 3, initial_label_offset = 30, to_label_tx = True):
     """
     returns array of (num_classes_added, ds) tups
     """

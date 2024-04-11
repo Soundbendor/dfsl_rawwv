@@ -29,18 +29,21 @@ to_res = true
 to_nep = true
 train_phase = "novel_valid"
 baseset="esc50"
-novelset="tinysol"
+#novelset="tinysol"
+novelset="esc50"
 n_way = 5
 k_shot = 4
 
 emb_load_num = 34
 cls_load_num = 999
-expr_num = 1712048373134
+expr_num = 1712804298219
 emb_idx = 0
 cls_idx = 1
-model_dir ='/media/dxk/tosh_ext/fscil/dfsl_rawwv/save'
+#model_dir ='/media/dxk/tosh_ext/fscil/dfsl_rawwv/save'
 
-save_dir = '/media/dxk/tosh_ext/fscil/dfsl_rawwv/save'
+save_dir = '/media/dxk/TOSHIBA EXT/fscil/dfsl_rawwv/save'
+model_dir = '/media/dxk/TOSHIBA EXT/fscil/dfsl_rawwv/save'
+#save_dir = '/media/dxk/tosh_ext/fscil/dfsl_rawwv/save'
 base_dir ='/home/dxk/ds/ESC-50-master'
-#novel_dir ='/home/dxk/ds/ESC-50-master'
-novel_dir ='/home/dxk/ds/TinySOL'
+novel_dir ='/home/dxk/ds/ESC-50-master'
+#novel_dir ='/home/dxk/ds/TinySOL'

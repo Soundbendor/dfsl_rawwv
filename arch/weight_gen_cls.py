@@ -55,6 +55,8 @@ class WeightGenCls(nn.Module):
 
     def set_train_phase(self, cur_tph):
         self.train_phase = cur_tph
+        if cur_tph != TrainPhase.base_weightgen:
+            self.novel_emb = None
         
     def clear_exclude_idxs(self):
         self.exclude_idxs = np.array([])
@@ -70,6 +72,7 @@ class WeightGenCls(nn.Module):
 
 
     # change number of classification vector slots
+    # if same number as before, just reset
     def renum_novel_classes(self, num_novel_classes,device='cpu'):
         novel_clip_num = max(0, num_novel_classes)
         old_num = self.num_classes_novel
@@ -80,6 +83,9 @@ class WeightGenCls(nn.Module):
                 new_cls_vec_novel[:old_num] = self.cls_vec_novel[:old_num]
             self.cls_vec_novel = new_cls_vec_novel 
             self.num_classes_novel = novel_clip_num
+        else:
+            new_cls_vec_novel = self.cls_vec_novel.clone().detach()
+            self.cls_vec_novel = new_cls_vec_novel 
         return novel_clip_num
         
         
@@ -108,26 +114,45 @@ class WeightGenCls(nn.Module):
         else:
             nonex_idxs = self.get_nonexcluded_idxs()
             cur_csim = self.gamma * self.cos_sim(zq, self.k_b[nonex_idxs]) # (k_shot, dim) x (dim, nb) = (k_shot, nb)
+            #print(self.gamma)
             cur_smax = self.attn_smax(cur_csim)
             attended = torch.matmul(cur_smax, nn.functional.normalize(self.cls_vec[nonex_idxs], dim=1, p=2))
 
         kshot_mean = torch.mean(attended, dim=0) # mean over all kshot inputs
         return kshot_mean
 
-    def calc_w_n_plus_1(self, z_arr):
+    def calc_w_n_plus_1(self, z_normed):
         #print(z_arr.shape, z_avg.shape)
-        z_normed = nn.functional.normalize(z_arr,dim=1,p=2)
-        w_att = self.calc_w_att(z_normed)
         z_avg = torch.mean(z_normed, dim=0)
-        #print(self.phi_avg.requires_grad, self.phi_att.requires_grad, self.phi_q.requires_grad)
-        cur_wn = torch.mul(self.phi_avg, z_avg) + torch.mul(self.phi_att, w_att)
-        return cur_wn
+        w_att = self.calc_w_att(z_normed)
+        #print(self.phi_avg.requires_grad, self.phi_att.requires_grad, self.phi_q.requires_grad, self.gamma.requires_grad)
+        sum1 = torch.mul(self.phi_avg, z_avg) 
+        sum2 = torch.mul(self.phi_att, w_att)
+        cur_vec = sum1 + sum2
+        return cur_vec
         
     def set_pseudonovel_vec(self, k_novel_idx, k_novel_ft):
-        cur_wn = self.calc_w_n_plus_1(k_novel_ft)
+        cur_wn = None
+        z_normed = nn.functional.normalize(k_novel_ft,dim=1,p=2)
+        """
+        if self.train_phase == TrainPhase.base_weightgen:
+            if self.novel_emb == None:
+                self.novel_emb = k_novel_ft
+                
+                cur_wn = self.calc_w_n_plus_1(self.novel_emb)
+            else:
+                cur_num_ft = k_novel_ft.shape[0]
+                old_num_ft = self.novel_emb.shape[0]
+                self.novel_emb = torch.vstack((self.novel_emb, k_novel_ft))
+                
+                cur_wn = self.calc_w_n_plus_1(self.novel_emb[old_num_ft:])
+        else:
+            cur_wn = self.calc_w_n_plus_1(k_novel_ft)
+        """
+        cur_wn = self.calc_w_n_plus_1(z_normed)
         cur_idx = k_novel_idx - self.num_classes_base
         #print(cur_idx)
-        self.cls_vec_novel[k_novel_idx - self.num_classes_base] = cur_wn
+        self.cls_vec_novel[cur_idx] = cur_wn
 
    
     def print_cls_vec_norms(self):
@@ -150,6 +175,7 @@ class WeightGenCls(nn.Module):
         self.phi_att.requires_grad_(to_enable)
         self.phi_q.requires_grad_(to_enable)
         self.tau.requires_grad_(to_enable)
+        self.gamma.requires_grad_(to_enable)
  
     def calc_pseudonovel_vecs(self, zarrs, zavgs, zclasses, watt):
         for i in range(zarrs.shape[0]):

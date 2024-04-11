@@ -1,13 +1,13 @@
 batch_size = 4
 cls_fn = "cos_sim"
 model = "samplecnn"
-base_epochs=35
+base_epochs=100
 weightgen_epochs=1000
 novel_epochs=1
 save_ivl = 1000
 label_smoothing = 0
 learning_rate = 0.00025
-learning_rate_weightgen = 0.1
+learning_rate_weightgen = 0.001
 multilabel = false
 omit_last_relu = true
 sample_rate = 16000
@@ -34,7 +34,8 @@ baseset="esc50"
 novelset="esc50"
 n_way = 5
 k_shot = 4
-save_dir = '/media/dxk/tosh_ext/fscil/dfsl_rawwv/save'
+#save_dir = '/media/dxk/tosh_ext/fscil/dfsl_rawwv/save'
+save_dir = '/media/dxk/TOSHIBA EXT/fscil/dfsl_rawwv/save'
 base_dir ='/home/dxk/ds/ESC-50-master'
 novel_dir ='/home/dxk/ds/ESC-50-master'
 

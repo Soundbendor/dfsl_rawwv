@@ -144,8 +144,7 @@ def runner(model, expr_num = 0, train_phase = TrainPhase.base_init, seed=UG.DEF_
             wvec = None
             if use_class_weights == True:
                 wvec = base_train_data.get_class_weights()
-            #print(wvec)
-            args['weight'] = torch.tensor(wvec, dtype=torch.float32)
+                args['weight'] = torch.tensor(wvec, dtype=torch.float32)
             #print(args['weight'])
             cur_loss = nn.CrossEntropyLoss(**args)
 
@@ -156,7 +155,7 @@ def runner(model, expr_num = 0, train_phase = TrainPhase.base_init, seed=UG.DEF_
         base_weightgen_trainer(model, cur_optim_weightgen, base_train_data, base_valid_data, lr=lr, bs = bs, epochs = weightgen_epochs, save_ivl = save_ivl, save_dir = save_dir, res_dir = res_dir, graph_dir = graph_dir, device = device, expr_num = expr_num, multilabel=multilabel, label_smoothing = label_smoothing, num_classes_base = num_classes_base, to_print = to_print, to_time = to_time, to_graph = to_graph, to_res = to_res, rng = rng, n_way = n_way, k_shot = k_shot, modelname = modelname, baseset=baseset, novelset=novelset, use_class_weights = use_class_weights, nep=nep)
  
     if train_phase in [TrainPhase.novel_valid, TrainPhase.run_all]:
-        novel_tester(model, base_test_data, novel_val_datas, bs = bs, epochs = novel_epochs, res_dir = res_dir, graph_dir = graph_dir, device = device, expr_num = expr_num, to_print = to_print, to_time = to_time, to_graph = to_graph, to_res = to_res, rng = rng, n_way = n_way, k_shot = k_shot, max_num_test=8,  modelname = modelname, baseset = baseset, novelset = novelset, train_phase=TrainPhase.novel_valid, batch_type=BatchType.test, multilabel = multilabel, label_smoothing = label_smoothing, use_class_weights = use_class_weights, nep = nep)
+        novel_tester(model, base_test_data, novel_val_datas, bs = bs, epochs = novel_epochs, res_dir = res_dir, graph_dir = graph_dir, device = device, expr_num = expr_num, to_print = to_print, to_time = to_time, to_graph = to_graph, to_res = to_res, rng = rng, n_way = n_way, k_shot = k_shot, max_num_test=8,  modelname = modelname, baseset = baseset, novelset = novelset, train_phase=TrainPhase.novel_valid, multilabel = multilabel, use_class_weights = use_class_weights, nep = nep)
 def loss_printer(epoch_idx, batch_idx, cur_loss, loss_type=BatchType.train, to_print = True):
     if to_print == True:
         cur_str = f"{loss_type.name} loss ({epoch_idx},{batch_idx}): {cur_loss}"
@@ -182,6 +181,7 @@ def batch_handler(cur_model, dloader_arr, loss_fn=None, opt_fn=None, batch_type 
         cur_model.train()
     #print(f"Before no_grad {cur_model.classifier.cls_vec.requires_grad}")
     with (torch.no_grad() if train == False else contextlib.nullcontext()):
+        print("training", train)
         for dloader in dloader_arr:
             for batch_idx, (ci,cl) in enumerate(dloader):
                 #print(ci.shape, cl.shape)
@@ -216,12 +216,12 @@ def batch_handler(cur_model, dloader_arr, loss_fn=None, opt_fn=None, batch_type 
                     batch_times.append(time_finish - time_last)
                     time_last = time_start
                 """
-            """
+        
             if train == True and train_phase == TrainPhase.base_weightgen:
                 batch_loss.backward()
                 opt_fn.step()
                 opt_fn.zero_grad()
-            """
+            
             #del batch_loss
     #print(f"After no_grad {cur_model.classifier.cls_vec.requires_grad}")
     time_avg = -1
@@ -402,7 +402,7 @@ def novel_tester(model, base_test_data, novel_test_datas, bs = 4, epochs = 1, re
             #print("novel_classes_test", novel_unsamp_classes)
             if to_print == True:
                 print(f"--- Novel Testing for Task {i} ---")
-            res_novel = batch_handler(model, novel_dls, cur_loss, opt_fn=None, batch_type = batch_type, device=device, epoch_idx=epoch_idx, train_phase = train_phase, bs=bs, num_classes = num_total, to_print=to_print, to_time = to_time, modelname=modelname, dsname=novelset, ds_idx=epoch_idx, multilabel=multilabel)
+            res_novel = batch_handler(model, novel_dls, loss_fn = None, opt_fn=None, batch_type = batch_type, device=device, epoch_idx=epoch_idx, train_phase = train_phase, bs=bs, num_classes = num_total, to_print=to_print, to_time = to_time, modelname=modelname, dsname=novelset, ds_idx=epoch_idx, multilabel=multilabel)
 
             novel_confmat_path = ""
             if nep != None:
@@ -448,17 +448,6 @@ def base_weightgen_trainer(model, cur_optim, train_data, valid_data, lr=1e-4, bs
     cur_optim.zero_grad()
     res_wgen_batches = []
     res_valid_batches = []
-    cur_loss = None
-    if multilabel == True:
-        cur_loss = nn.BCEWithLogitsLoss()
-    else:
-        args = {'label_smoothing': label_smoothing, 'reduction': 'sum'}
-        wvec = None
-        if use_class_weights == True:
-            wvec = test_data.get_class_weights(num_unremapped = ex_per_class, num_remapped=ex_per_class)
-        args['weight'] = wvec
-        cur_loss = nn.CrossEntropyLoss(**args)
-
     # result accumulation
     for epoch_idx in range(epochs):
         # unmapped pseudonovel idxs
@@ -475,6 +464,19 @@ def base_weightgen_trainer(model, cur_optim, train_data, valid_data, lr=1e-4, bs
         valid_data.set_remapped_idx_subset(pseudo_novel_class_idxs)
         #print(model.classifier.cls_vec_copy.shape)
         unsampled_pseudo_novel_ex_idxs = []
+        cur_loss = None
+        if multilabel == True:
+            cur_loss = nn.BCEWithLogitsLoss()
+        else:
+            args = {'label_smoothing': label_smoothing, 'reduction': 'sum'}
+            wvec = None
+            if use_class_weights == True:
+                wvec = train_data.get_class_weights(num_unremapped = ex_per_class, num_remapped=ex_per_class)
+                args['weight'] = torch.tensor(wvec, dtype=torch.float32)
+
+            cur_loss = nn.CrossEntropyLoss(**args)
+
+
         for pseudo_novel_class_idx in pseudo_novel_class_idxs:
             pseudo_novel_ex_idxs = train_data.get_class_ex_idxs(pseudo_novel_class_idx)
             pseudo_novel_ex_support = rng.choice(pseudo_novel_ex_idxs, size=k_shot, replace=False)
@@ -524,7 +526,7 @@ def base_weightgen_trainer(model, cur_optim, train_data, valid_data, lr=1e-4, bs
         valid_dl = DataLoader(valid_data, batch_size=bs, shuffle=True,  generator = torch.Generator(device=device))
         model.zero_grad()
         cur_optim.zero_grad()
-
+        #print("validating")
         res_valid = batch_handler(model, [valid_dl], loss_fn=cur_loss, opt_fn=None, batch_type = BatchType.valid, device=device, epoch_idx=epoch_idx, bs=bs, to_print=to_print, to_time = to_time, num_classes = num_classes_base + n_way, modelname=modelname, dsname=baseset, multilabel=multilabel)
         if to_res == True:
             UR.res_csv_appender(res_valid, dest_dir=res_dir, expr_num = expr_num, epoch_idx=epoch_idx, batch_type=BatchType.valid, modelname=modelname, train_phase = TrainPhase.base_weightgen, baseset = baseset, novelset = novelset, pretrain = False)
