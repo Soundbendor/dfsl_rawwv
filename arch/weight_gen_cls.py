@@ -81,11 +81,14 @@ class WeightGenCls(nn.Module):
             new_cls_vec_novel.resize_(novel_clip_num, self.dim)
             if old_num > 0:
                 new_cls_vec_novel[:old_num] = self.cls_vec_novel[:old_num]
-            self.cls_vec_novel = new_cls_vec_novel 
+            self.cls_vec_novel = Parameter(new_cls_vec_novel)
             self.num_classes_novel = novel_clip_num
-        else:
+        elif novel_clip_num > 0:
             new_cls_vec_novel = self.cls_vec_novel.clone().detach()
-            self.cls_vec_novel = new_cls_vec_novel 
+            self.cls_vec_novel = Parameter(new_cls_vec_novel )
+        else:
+            self.num_classes_novel = 0
+            self.cls_vec_novel = Parameter(torch.zeros(0,self.dim))
         return novel_clip_num
         
         

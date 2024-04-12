@@ -450,6 +450,7 @@ def base_weightgen_trainer(model, cur_optim, train_data, valid_data, lr=1e-4, bs
     res_valid_batches = []
     # result accumulation
     for epoch_idx in range(epochs):
+        torch.cuda.empty_cache()
         # unmapped pseudonovel idxs
         #model.renum_novel_classes(0, device=device)
         pseudo_novel_class_idxs = rng.choice(base_class_idxs, size=n_way, replace=False)
