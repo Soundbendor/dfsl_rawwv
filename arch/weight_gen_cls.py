@@ -60,6 +60,7 @@ class WeightGenCls(nn.Module):
         
     def clear_exclude_idxs(self):
         self.exclude_idxs = np.array([])
+        self.renum_novel_classes(0)
         self.has_exclude_idxs = False
 
     def cos_sim(self, ipt1, ipt2):
@@ -76,7 +77,7 @@ class WeightGenCls(nn.Module):
     def renum_novel_classes(self, num_novel_classes,device='cpu'):
         novel_clip_num = max(0, num_novel_classes)
         old_num = self.num_classes_novel
-        if novel_clip_num != old_num:
+        if novel_clip_num != old_num and novel_clip_num > 0:
             new_cls_vec_novel = self.cls_vec_novel.clone().detach()
             new_cls_vec_novel.resize_(novel_clip_num, self.dim)
             if old_num > 0:
@@ -155,7 +156,8 @@ class WeightGenCls(nn.Module):
         cur_wn = self.calc_w_n_plus_1(z_normed)
         cur_idx = k_novel_idx - self.num_classes_base
         #print(cur_idx)
-        self.cls_vec_novel[cur_idx] = cur_wn
+        with torch.no_grad():
+            self.cls_vec_novel[cur_idx] = cur_wn
 
    
     def print_cls_vec_norms(self):
