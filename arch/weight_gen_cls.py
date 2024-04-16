@@ -27,7 +27,8 @@ class WeightGenCls(nn.Module):
         self.cls_vec = Parameter(cls_vec) # idea from (3)
 
         # separating out base and novel classes like gidaris
-        self.cls_vec_novel = torch.zeros(num_classes_novel,dim)
+        #self.cls_vec_novel = torch.zeros(num_classes_novel,dim)
+        self.cls_vec_novel = Parameter(torch.zeros(num_classes_novel,self.dim))
         #self.cls_vec_novel.requires_grad_(False)
         #from (2)
         self.cls_fn_type = 'cos_sim'
