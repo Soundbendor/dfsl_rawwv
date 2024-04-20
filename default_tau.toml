@@ -1,0 +1,45 @@
+learning_rate=0.00025
+cls_fn='cos_sim'
+model = "cnn14"
+sample_rate=16000
+batch_size=4
+base_epochs=1
+weightgen_epochs=3
+novel_epochs=10
+multilabel=false
+use_class_weights=false
+label_smoothing=0.0
+se_fc_alpha=0.25
+rese1_fc_alpha=0.25
+rese2_fc_alpha=0.25
+se_dropout=0.5
+res1_dropout=0.5
+res2_dropout=0.5
+rese1_dropout=0.5
+rese2_dropout=0.5
+simple_dropout=0.5
+save_ivl=0
+load_emb=''
+load_cls=''
+load_model_by_tup='-1,-1'
+omit_last_relu=true
+use_prelu=true
+se_prelu=false
+to_print=true
+to_time=true
+to_graph=true
+to_res=true
+to_nep=false
+#train_phase='base_trainall'
+train_phase='run_all'
+#train_phase = 'base_weightgen'
+#train_phase = 'base_init'
+
+n_way = 2
+k_shot = 4
+baseset="tau"
+novelset="tau"
+
+base_dir ='/media/dxk/TOSHIBA EXT/ds/tau_urban_acoustic_scenes_2019/TAU-urban-acoustic-scenes-2019-development'
+novel_dir ='/media/dxk/TOSHIBA EXT/ds/tau_urban_acoustic_scenes_2019/TAU-urban-acoustic-scenes-2019-development'
+

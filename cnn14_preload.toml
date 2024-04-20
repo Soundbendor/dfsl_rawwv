@@ -36,7 +36,8 @@ data_dir ='/home/dxk/ds/'
 
 emb_load_num = 74
 cls_load_num = 199
-expr_num = 1709125786035
+emb_expr_num = 1709125786035
+cls_expr_num = 1709125786035
 emb_idx = 0
 cls_idx = 1
 model_dir ='/media/dxk/TOSHIBA EXT/fscil/dfsl_rawwv/save'

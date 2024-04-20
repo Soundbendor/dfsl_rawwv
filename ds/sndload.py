@@ -8,9 +8,9 @@ import matplotlib.pyplot as plt
 import os
 import sys
 
-def sndloader(want_file:str, want_sr:int = None, want_bits:int = None, max_samp = np.inf, to_mono:bool = True) -> any:
+def sndloader(want_file:str, want_sr:int = None, want_bits:int = None, max_samp = np.inf, frame_offset:int = 0, to_mono:bool = True) -> any:
     read_frames = int(max_samp) if np.isfinite(max_samp) == True else -1
-    cur_wf, cur_sr = TA.load(want_file, num_frames = read_frames)
+    cur_wf, cur_sr = TA.load(want_file, frame_offset = frame_offset, num_frames = read_frames)
     cur_nc, cur_nf = cur_wf.shape
     ret_wf = None
     ret_sr = None

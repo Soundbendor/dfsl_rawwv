@@ -8,6 +8,7 @@ from arch.sampcnn_model import SampCNNModel
 from arch.cnn14_model import CNN14Model
 from ds.esc50 import ESC50, make_esc50_fewshot_tasks 
 from ds.tinysol import TinySOL, make_tinysol_fewshot_tasks
+from ds.tau import TAU, make_tau_fewshot_tasks
 import os
 import argparse
 import time
@@ -58,6 +59,12 @@ def runner(model, expr_num = 0, train_phase = TrainPhase.base_init, seed=UG.DEF_
     tinysol_df = None
     esc50path = None
     tinysolpath = None
+    taupath = None
+    tau_evalpath = None
+    taumain_df = None
+    tautrain_df = None
+    tauvalid_df = None
+    tautest_df = None
     #esc50path = os.path.join(data_dir, "ESC-50-master")
     if baseset == DatasetName.esc50:
         esc50path = base_dir
@@ -71,23 +78,49 @@ def runner(model, expr_num = 0, train_phase = TrainPhase.base_init, seed=UG.DEF_
     if novelset == DatasetName.tinysol:
         tinysolpath = novel_dir
         tinysol_df = pd.read_csv(os.path.join(novel_dir, "TinySOL_metadata.csv"))
+    if baseset == DatasetName.tau:
+        taupath = base_dir
+        taumain_df = pd.read_csv(os.path.join(base_dir, "meta.csv"), sep="\t")
+        tau_evalpath =os.path.join(base_dir, "evaluation_setup")
+        tautrain_df = pd.read_csv(os.path.join(tau_evalpath, "fold1_train.csv"), sep="\t")
+        tauvalid_df = pd.read_csv(os.path.join(tau_evalpath, "fold1_evaluate.csv"), sep="\t")
+        _tautest = pd.read_csv(os.path.join(tau_evalpath, "fold1_test.csv"), sep="\t")
+        tautest_df =  _tautest.merge(taumain_df,left_on='filename', right_on = 'filename')
+    if novelset == DatasetName.tau:
+        taupath = novel_dir
+        taumain_df = pd.read_csv(os.path.join(novel_dir, "meta.csv"), sep="\t")
+        tau_evalpath =os.path.join(base_dir, "evaluation_setup")
+        tautrain_df = pd.read_csv(os.path.join(tau_evalpath, "fold1_train.csv"), sep="\t")
+        tauvalid_df = pd.read_csv(os.path.join(tau_evalpath, "fold1_evaluate.csv"), sep="\t")
+        # fold1_test.csv does not have class labels so add them from meta.csv
+        _tautest = pd.read_csv(os.path.join(tau_evalpath, "fold1_test.csv"), sep="\t")
+        tautest_df =  _tautest.merge(taumain_df,left_on='filename', right_on = 'filename')
 
-   
-    esc50_num_classes_base = 30
-    esc50_num_classes_valid = 10
-    esc50_num_classes_test = 10
-    esc50_num_classes_total = esc50_num_classes_base + esc50_num_classes_valid + esc50_num_classes_test
-    esc50_class_order = np.arange(0,esc50_num_classes_total) # order of classes
+
+
+    
+    # base, novel_valid, novel_test
+    esc50_class_order = np.arange(0,UG.ESC50_NUMCLASSES_TOTAL) # order of classes
     rng.shuffle(esc50_class_order) # shuffle classes
-    esc50_base_classes = esc50_class_order[:esc50_num_classes_base]
-    esc50_novelval_classes = esc50_class_order[esc50_num_classes_base: esc50_num_classes_base + esc50_num_classes_valid]
-    esc50_noveltest_classes = esc50_class_order[esc50_num_classes_base + esc50_num_classes_valid: esc50_num_classes_total]
+    esc50_base_classes = esc50_class_order[:UG.ESC50_NUMCLASSES[0]]
+    esc50_novelval_classes = esc50_class_order[UG.ESC50_NUMCLASSES[0]: UG.ESC50_NUMCLASSES[0] + UG.ESC50_NUMCLASSES[1]]
+    esc50_noveltest_classes = esc50_class_order[UG.ESC50_NUMCLASSES[0] + UG.ESC50_NUMCLASSES[1]: UG.ESC50_NUMCLASSES_TOTAL]
     esc50_fold_order = np.arange(1,6) # order of folds
     rng.shuffle(esc50_fold_order) # shuffle folds to group folds other than sequentially
     esc50_training_folds = esc50_fold_order[:3]
     esc50_valid_folds = esc50_fold_order[3:4]
     esc50_test_folds = esc50_fold_order[4:]
     #print("base_train")
+
+    # base, novel_valid,novel_test 
+    tau_class_order = np.arange(0,UG.TAU_NUMCLASSES_TOTAL)
+    rng.shuffle(tau_class_order)
+    tau_base_classes = tau_class_order[:UG.TAU_NUMCLASSES[0]]
+    tau_novelval_classes = tau_class_order[UG.TAU_NUMCLASSES[0]: UG.TAU_NUMCLASSES[0] + UG.TAU_NUMCLASSES[1]]
+    tal_noveltest_classes = tau_class_order[UG.TAU_NUMCLASSES[0] + UG.TAU_NUMCLASSES[1]: UG.TAU_NUMCLASSES_TOTAL]
+
+    # don't need to shuffle
+    
 
     # ~~~~~ DATALOADING ~~~~~
     base_train_data = None
@@ -99,7 +132,7 @@ def runner(model, expr_num = 0, train_phase = TrainPhase.base_init, seed=UG.DEF_
     num_classes_valid = None
     num_classes_test = None
     if baseset == DatasetName.esc50:
-        num_classes_base = 30
+        num_classes_base = UG.ESC50_NUMCLASSES[0]
         base_train_data = ESC50(esc50_df, folds=esc50_training_folds, classes=esc50_base_classes, k_shot=24, srate=sr, samp_sz=max_samp, basefolder = esc50path, seed = cur_seed, label_offset = 0, one_hot = use_one_hot, to_label_tx = True)
         #print("base_valid")
         base_valid_data = ESC50(esc50_df, folds=esc50_valid_folds, classes=esc50_base_classes, k_shot=8, srate=sr, samp_sz=max_samp, basefolder = esc50path, seed = cur_seed, label_offset = 0, one_hot = use_one_hot, to_label_tx = True)
@@ -107,14 +140,33 @@ def runner(model, expr_num = 0, train_phase = TrainPhase.base_init, seed=UG.DEF_
         base_test_data = ESC50(esc50_df, folds=esc50_test_folds, classes=esc50_base_classes, k_shot=8, srate=sr, samp_sz=max_samp, basefolder = esc50path, seed = cur_seed, label_offset = 0, one_hot = use_one_hot, to_label_tx = True)
 
 
+    elif baseset == DatasetName.tau:
+        num_classes_base = UG.TAU_NUMCLASSES[0]
+        base_train_data = TAU(tautrain_df, k_shot=np.inf, classes = tau_base_classes, srate=sr, samp_sz=max_samp, basefolder = taupath, seed = cur_seed, label_offset = 0, one_hot = use_one_hot, to_label_tx = True)
+        #print("base_valid")
+        base_valid_data = TAU(tauvalid_df, classes=tau_base_classes, k_shot=np.inf, srate=sr, samp_sz=max_samp, basefolder = taupath, seed = cur_seed, label_offset = 0, one_hot = use_one_hot, to_label_tx = True)
+        #print("base_test")
+        base_test_data = TAU(tautest_df, classes=tau_base_classes, k_shot=np.inf, srate=sr, samp_sz=max_samp, basefolder = taupath, seed = cur_seed, label_offset = 0, one_hot = use_one_hot, to_label_tx = True)
+
+
+
+
 
     # essentially can take from all folds
     # set k to np inf to just take all the possible examples
     if novelset == DatasetName.esc50:
-        num_classes_valid = 10
-        num_classes_test = 10
-        novel_val_datas = make_esc50_fewshot_tasks(esc50_df, folds=esc50_fold_order, classes=esc50_novelval_classes, n_way = n_way, k_shot = np.inf, srate=sr, samp_sz=max_samp, basefolder = esc50path, seed= cur_seed, initial_label_offset = esc50_num_classes_base, one_hot = use_one_hot, to_label_tx = True)
-        novel_test_datas = make_esc50_fewshot_tasks(esc50_df, folds=esc50_fold_order, classes=esc50_noveltest_classes, n_way = n_way, k_shot = np.inf, srate=sr, samp_sz=max_samp, basefolder = esc50path, seed= cur_seed, initial_label_offset = esc50_num_classes_base, one_hot = use_one_hot, to_label_tx = True)
+        num_classes_valid = UG.ESC50_NUMCLASSES[1]
+        num_classes_test = UG.ESC50_NUMCLASSES[2]
+        novel_val_datas = make_esc50_fewshot_tasks(esc50_df, folds=esc50_fold_order, classes=esc50_novelval_classes, n_way = n_way, k_shot = np.inf, srate=sr, samp_sz=max_samp, basefolder = esc50path, seed= cur_seed, initial_label_offset = UG.ESC50_NUMCLASSES[0], one_hot = use_one_hot, to_label_tx = True)
+        novel_test_datas = make_esc50_fewshot_tasks(esc50_df, folds=esc50_fold_order, classes=esc50_noveltest_classes, n_way = n_way, k_shot = np.inf, srate=sr, samp_sz=max_samp, basefolder = esc50path, seed= cur_seed, initial_label_offset = UG.ESC50_NUMCLASSES[0], one_hot = use_one_hot, to_label_tx = True)
+    elif novelset == DatasetName.tau:
+        num_classes_valid = UG.TAU_NUMCLASSES[1]
+        num_classes_test = UG.TAU_NUMCLASSES[2]
+        # don't really have to be valid and test? can be from base since no class overlap
+        if num_classes_valid > 0:
+            novel_val_datas = make_tau_fewshot_tasks(tauvalid_df, classes=tau_novelval_classes, n_way = n_way, k_shot = np.inf, srate=sr, samp_sz=max_samp, basefolder = taupath, seed= cur_seed, initial_label_offset = UG.TAU_NUMCLASSES[0], one_hot = use_one_hot, to_label_tx = True)
+        if num_classes_test > 0:
+            novel_test_datas = make_tau_fewshot_tasks(tautest_df, classes=tau_noveltest_classes, n_way = n_way, k_shot = np.inf, srate=sr, samp_sz=max_samp, basefolder = taupath, seed= cur_seed, initial_label_offset = UG.TAU_NUMCLASSES[0], one_hot = use_one_hot, to_label_tx = True)
     elif novelset == DatasetName.tinysol:
         num_classes_valid = 14
         num_classes_test = 14
@@ -154,8 +206,12 @@ def runner(model, expr_num = 0, train_phase = TrainPhase.base_init, seed=UG.DEF_
     if train_phase in [TrainPhase.base_weightgen, TrainPhase.base_trainall, TrainPhase.run_all]:
         base_weightgen_trainer(model, cur_optim_weightgen, base_train_data, base_valid_data, lr=lr, bs = bs, epochs = weightgen_epochs, save_ivl = save_ivl, save_dir = save_dir, res_dir = res_dir, graph_dir = graph_dir, device = device, expr_num = expr_num, multilabel=multilabel, label_smoothing = label_smoothing, num_classes_base = num_classes_base, to_print = to_print, to_time = to_time, to_graph = to_graph, to_res = to_res, rng = rng, n_way = n_way, k_shot = k_shot, modelname = modelname, baseset=baseset, novelset=novelset, use_class_weights = use_class_weights, nep=nep)
  
-    if train_phase in [TrainPhase.novel_valid, TrainPhase.run_all]:
+    if train_phase in [TrainPhase.novel_valid, TrainPhase.run_all] and num_classes_valid > 0:
         novel_tester(model, base_test_data, novel_val_datas, bs = bs, epochs = novel_epochs, res_dir = res_dir, graph_dir = graph_dir, device = device, expr_num = expr_num, to_print = to_print, to_time = to_time, to_graph = to_graph, to_res = to_res, rng = rng, n_way = n_way, k_shot = k_shot, max_num_test=8,  modelname = modelname, baseset = baseset, novelset = novelset, train_phase=TrainPhase.novel_valid, multilabel = multilabel, use_class_weights = use_class_weights, nep = nep)
+
+    if train_phase in [TrainPhase.novel_test, TrainPhase.run_all] and num_classes_test > 0:
+        novel_tester(model, base_test_data, novel_test_datas, bs = bs, epochs = novel_epochs, res_dir = res_dir, graph_dir = graph_dir, device = device, expr_num = expr_num, to_print = to_print, to_time = to_time, to_graph = to_graph, to_res = to_res, rng = rng, n_way = n_way, k_shot = k_shot, max_num_test=8,  modelname = modelname, baseset = baseset, novelset = novelset, train_phase=TrainPhase.novel_test, multilabel = multilabel, use_class_weights = use_class_weights, nep = nep)
+
 def loss_printer(epoch_idx, batch_idx, cur_loss, loss_type=BatchType.train, to_print = True):
     if to_print == True:
         cur_str = f"{loss_type.name} loss ({epoch_idx},{batch_idx}): {cur_loss}"
@@ -168,7 +224,6 @@ def batch_handler(cur_model, dloader_arr, loss_fn=None, opt_fn=None, batch_type 
     curmet = UM.metric_creator(num_classes=num_classes, multilabel=multilabel, device=device)
     #train = not (opt_fn is None)
     train = batch_type.name == 'train'
-
     valid = batch_type.name == 'valid'
     time_start = -1
     time_last = -1
@@ -190,7 +245,6 @@ def batch_handler(cur_model, dloader_arr, loss_fn=None, opt_fn=None, batch_type 
                 #print(pred.argmax(dim=1))
                 #print("--- true ---")
                 #print(cl)
-                #print(bs, pred.shape)
                 #print(ci.shape)
                 #print(cl.shape)
                 #print(ci,cl)
@@ -451,6 +505,11 @@ def base_weightgen_trainer(model, cur_optim, train_data, valid_data, lr=1e-4, bs
     # result accumulation
     for epoch_idx in range(epochs):
         torch.cuda.empty_cache()
+        pseudo_novel_support_subset = None
+        pseudo_novel_support_dl = None
+        query_set = None 
+        query_dl = None 
+        valid_dl = None
         # unmapped pseudonovel idxs
         #model.renum_novel_classes(0, device=device)
         pseudo_novel_class_idxs = rng.choice(base_class_idxs, size=n_way, replace=False)
@@ -631,9 +690,10 @@ if __name__ == "__main__":
     res2_list = []
     simple_list = []
     # middle dim according to (1) is same as num channels
-    num_classes_base = 30
-    num_classes_valid = 10
-    num_classes_test = 10
+    
+    num_classes_base = UG.ESC50_NUMCLASSES[0]
+    if args['baseset'] == 'tau':
+        num_classes_base = UG.TAU_NUMCLASSES[0]
     device = 'cpu'
     t_ph = TrainPhase[args["train_phase"]]
     #max_samp = 118098
@@ -660,26 +720,37 @@ if __name__ == "__main__":
     load_cls = args["load_cls"]
     emb_idx = args["emb_idx"]
     cls_idx = args["cls_idx"]
-    if args["expr_num"] >= 0 and args["emb_load_num"] >= 0 and args["cls_load_num"] >= 0:
-        expr_num = args["expr_num"]
+    emb_expr_num = -1
+    cls_expr_num = -2
+    if args["emb_expr_num"] >= 0 and args["emb_load_num"] >= 0:
+        emb_expr_num = args["emb_expr_num"]
         emb_load_num = args["emb_load_num"]
-        cls_load_num = args["cls_load_num"]
         load_emb_fname = f"{expr_num}_{emb_idx}-{modelname}-{baseset}_embedder_{emb_load_num}-model.pth"
-        load_cls_fname = f"{expr_num}_{cls_idx}-{modelname}-{baseset}_classifier_{cls_load_num}-model.pth"
         load_emb = os.path.join(args["model_dir"], load_emb_fname)
+    if args["cls_expr_num"] >= 0 and args["cls_load_num"] >= 0:
+        cls_expr_num = args["cls_expr_num"]
+        cls_load_num = args["cls_load_num"]
+        load_cls_fname = f"{expr_num}_{cls_idx}-{modelname}-{baseset}_classifier_{cls_load_num}-model.pth"
         load_cls = os.path.join(args["model_dir"], load_cls_fname)
+
     if ".pth" in load_emb:
         load_file = load_emb
-        if args["expr_num"] > 0 == False:
-            expr_num = int(load_file.split(os.sep)[-1].split("-")[0])
+        if args["emb_expr_num"] > 0 == False:
+            emb_expr_num = int(load_file.split(os.sep)[-1].split("-")[0])
         #t_ph = TrainPhase.base_weightgen
         model.embedder.load_state_dict(torch.load(load_emb))
-        print(f"loaded {load_emb}")
+        print(f"loaded embedder {load_emb}")
 
     if ".pth" in load_cls:
-        model.classifier.load_state_dict(torch.load(load_cls))
-        print(f"loaded {load_cls}")
+        load_file = load_cls
+        if args["cls_expr_num"] > 0 == False:
+            cls_expr_num = int(load_file.split(os.sep)[-1].split("-")[0])
 
+        model.classifier.load_state_dict(torch.load(load_cls))
+        print(f"loaded classifier {load_cls}")
+
+    if emb_expr_num == cls_expr_num:
+        expr_num = emb_expr_num
 
     nrun = None 
     # NEPTUNE STUFF

@@ -36,7 +36,8 @@ k_shot = 4
 
 emb_load_num = 34
 cls_load_num = 999
-expr_num = 1712804298219
+emb_expr_num = 1712804298219
+cls_expr_num = 1712804298219
 emb_idx = 0
 cls_idx = 1
 #model_dir ='/media/dxk/tosh_ext/fscil/dfsl_rawwv/save'

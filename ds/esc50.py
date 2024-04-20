@@ -91,7 +91,7 @@ class ESC50(Dataset):
     def unset_remapped_idx_subset(self):
         self.subset_num_remapped = 0 
         del self.subset_label_tx
-        self.subset_mapped_idxs = set([])
+        self.subset_remapped_idxs = set([])
         self.subset_is_remapped = False
 
 
