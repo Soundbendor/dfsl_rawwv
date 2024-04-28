@@ -725,12 +725,12 @@ if __name__ == "__main__":
     if args["emb_expr_num"] >= 0 and args["emb_load_num"] >= 0:
         emb_expr_num = args["emb_expr_num"]
         emb_load_num = args["emb_load_num"]
-        load_emb_fname = f"{expr_num}_{emb_idx}-{modelname}-{baseset}_embedder_{emb_load_num}-model.pth"
+        load_emb_fname = f"{emb_expr_num}_{emb_idx}-{modelname}-{baseset}_embedder_{emb_load_num}-model.pth"
         load_emb = os.path.join(args["model_dir"], load_emb_fname)
     if args["cls_expr_num"] >= 0 and args["cls_load_num"] >= 0:
         cls_expr_num = args["cls_expr_num"]
         cls_load_num = args["cls_load_num"]
-        load_cls_fname = f"{expr_num}_{cls_idx}-{modelname}-{baseset}_classifier_{cls_load_num}-model.pth"
+        load_cls_fname = f"{cls_expr_num}_{cls_idx}-{modelname}-{baseset}_classifier_{cls_load_num}-model.pth"
         load_cls = os.path.join(args["model_dir"], load_cls_fname)
 
     if ".pth" in load_emb:
