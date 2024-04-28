@@ -157,16 +157,16 @@ def runner(model, expr_num = 0, train_phase = TrainPhase.base_init, seed=UG.DEF_
     if novelset == DatasetName.esc50:
         num_classes_valid = UG.ESC50_NUMCLASSES[1]
         num_classes_test = UG.ESC50_NUMCLASSES[2]
-        novel_val_datas = make_esc50_fewshot_tasks(esc50_df, folds=esc50_fold_order, classes=esc50_novelval_classes, n_way = n_way, k_shot = np.inf, srate=sr, samp_sz=max_samp, basefolder = esc50path, seed= cur_seed, initial_label_offset = UG.ESC50_NUMCLASSES[0], one_hot = use_one_hot, to_label_tx = True)
-        novel_test_datas = make_esc50_fewshot_tasks(esc50_df, folds=esc50_fold_order, classes=esc50_noveltest_classes, n_way = n_way, k_shot = np.inf, srate=sr, samp_sz=max_samp, basefolder = esc50path, seed= cur_seed, initial_label_offset = UG.ESC50_NUMCLASSES[0], one_hot = use_one_hot, to_label_tx = True)
+        novel_val_datas = make_esc50_fewshot_tasks(esc50_df, folds=esc50_fold_order, classes=esc50_novelval_classes, n_way = n_way, k_shot = np.inf, srate=sr, samp_sz=max_samp, basefolder = esc50path, seed= cur_seed, initial_label_offset = num_classes_base, one_hot = use_one_hot, to_label_tx = True)
+        novel_test_datas = make_esc50_fewshot_tasks(esc50_df, folds=esc50_fold_order, classes=esc50_noveltest_classes, n_way = n_way, k_shot = np.inf, srate=sr, samp_sz=max_samp, basefolder = esc50path, seed= cur_seed, initial_label_offset = num_classes_base, one_hot = use_one_hot, to_label_tx = True)
     elif novelset == DatasetName.tau:
         num_classes_valid = UG.TAU_NUMCLASSES[1]
         num_classes_test = UG.TAU_NUMCLASSES[2]
         # don't really have to be valid and test? can be from base since no class overlap
         if num_classes_valid > 0:
-            novel_val_datas = make_tau_fewshot_tasks(tauvalid_df, classes=tau_novelval_classes, n_way = n_way, k_shot = np.inf, srate=sr, samp_sz=max_samp, basefolder = taupath, seed= cur_seed, initial_label_offset = UG.TAU_NUMCLASSES[0], one_hot = use_one_hot, to_label_tx = True)
+            novel_val_datas = make_tau_fewshot_tasks(tauvalid_df, classes=tau_novelval_classes, n_way = n_way, k_shot = np.inf, srate=sr, samp_sz=max_samp, basefolder = taupath, seed= cur_seed, initial_label_offset = num_classes_base, one_hot = use_one_hot, to_label_tx = True)
         if num_classes_test > 0:
-            novel_test_datas = make_tau_fewshot_tasks(tautest_df, classes=tau_noveltest_classes, n_way = n_way, k_shot = np.inf, srate=sr, samp_sz=max_samp, basefolder = taupath, seed= cur_seed, initial_label_offset = UG.TAU_NUMCLASSES[0], one_hot = use_one_hot, to_label_tx = True)
+            novel_test_datas = make_tau_fewshot_tasks(tautest_df, classes=tau_noveltest_classes, n_way = n_way, k_shot = np.inf, srate=sr, samp_sz=max_samp, basefolder = taupath, seed= cur_seed, initial_label_offset = num_classes_base, one_hot = use_one_hot, to_label_tx = True)
     elif novelset == DatasetName.tinysol:
         num_classes_valid = 14
         num_classes_test = 14
