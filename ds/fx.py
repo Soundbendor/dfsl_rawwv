@@ -12,6 +12,8 @@ pnoizpath = os.path.join(fxpath, 'pnoiz5s.wav')
 
 
 ipls_resp =SND.sndloader(irpath, want_sr = 16000, to_mono=True)
+
+# noise generated through sox -n filename.wav synth 5 white/pink/brownnoise
 bnoiz = SND.sndloader(bnoizpath, want_sr = 16000, to_mono=True)
 wnoiz = SND.sndloader(wnoizpath, want_sr = 16000, to_mono=True)
 pnoiz = SND.sndloader(pnoizpath, want_sr = 16000, to_mono=True)
