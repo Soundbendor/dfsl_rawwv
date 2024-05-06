@@ -3,6 +3,7 @@ import util.globals as UG
 from distutils.util import strtobool
 import tomllib
 
+
 settings = {
         "learning_rate": 0.00025,
         "learning_rate_weightgen": 0.0001,
@@ -27,6 +28,10 @@ settings = {
         "simple_dropout": 0.5,
         "dropout": 0.2,
         "dropout_final": 0.5,
+        "aug_train": False,
+        "aug_wgen": False,
+        "aug_novel": False,
+        "aug_type": 'random',
         "save_ivl": 0,
         "base_dir": UG.DEF_BASEDIR,
         "novel_dir": UG.DEF_NOVELDIR,

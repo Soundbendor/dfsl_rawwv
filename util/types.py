@@ -4,3 +4,4 @@ TrainPhase = Enum('TrainPhase', ['base_init', 'base_test', 'base_weightgen', 'ba
 DatasetType = Enum('DatasetType', ['base', 'novel'])
 ModelName = Enum('ModelName', ['samplecnn', 'cnn14'])
 DatasetName = Enum('DatasetName', ['esc50', 'tinysol', 'tau'])
+AugType = Enum('AugType', ['lpf', 'hpf', 'bpf', 'n10', 'n5','rvb', 'random'])
